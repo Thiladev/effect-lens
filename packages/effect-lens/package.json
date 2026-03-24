@@ -1,0 +1,43 @@
+{
+  "name": "effect-lens",
+  "description": "An effectful Lens type to easily manage nested state",
+  "version": "0.1.0",
+  "type": "module",
+  "files": [
+    "./README.md",
+    "./dist"
+  ],
+  "license": "MIT",
+  "repository": {
+    "url": "git+https://github.com/Thiladev/effect-lens.git"
+  },
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./*": [
+      {
+        "types": "./dist/*/index.d.ts",
+        "default": "./dist/*/index.js"
+      },
+      {
+        "types": "./dist/*.d.ts",
+        "default": "./dist/*.js"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "tsc",
+    "lint:tsc": "tsc --noEmit",
+    "lint:biome": "biome lint",
+    "pack": "npm pack",
+    "clean:cache": "rm -rf .turbo tsconfig.tsbuildinfo",
+    "clean:dist": "rm -rf dist",
+    "clean:modules": "rm -rf node_modules"
+  },
+  "peerDependencies": {
+    "effect": "^3.21.0"
+  }
+}

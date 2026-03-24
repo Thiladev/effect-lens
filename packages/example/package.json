@@ -1,0 +1,19 @@
+{
+  "name": "@effect-lens/example",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "lint:tsc": "tsc --noEmit",
+    "lint:biome": "biome lint",
+    "clean:cache": "rm -rf .turbo",
+    "clean:modules": "rm -rf node_modules"
+  },
+  "dependencies": {
+    "effect": "^3.21.0",
+    "effect-lens": "workspace:*"
+  },
+  "overrides": {
+    "effect": "^3.21.0"
+  }
+}
