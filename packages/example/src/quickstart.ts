@@ -1,3 +1,4 @@
+import { KeyValueStore } from "@effect/platform"
 import { Array, Console, Effect, Stream, SubscriptionRef } from "effect"
 import { Lens } from "effect-lens"
 
@@ -16,5 +17,7 @@ Effect.gen(function*() {
 })
 
 Effect.gen(function*() {
-
+    const lens = Lens.make({
+        get: Effect.andThen(KeyValueStore.KeyValueStore, )
+    })
 })

@@ -28,8 +28,11 @@ Lens<
 >
 ```
 
+
 ### Creating a Lens
-We provide a few helpers to create Lenses from a few Effect types:
+
+#### From an exisiting type
+We provide a few helpers to create Lenses from some Effect types:
 ```typescript
 // The ref is the data source
 const ref = yield* SubscriptionRef.make([12, 87, 69])
@@ -45,9 +48,47 @@ yield* Lens.update(lens, Array.replace(1, 1664))
 ```
 
 Currently available:
-- fromSubscriptionRef
-- fromSynchronizedRef (note: since `SynchronizedRef` is not reactive (does not produces a stream of value changes), the resulting Lens' `changes` stream will only emit the current value of the lens when evaluated, and nothing else)
+- `fromSubscriptionRef`
+- `fromSynchronizedRef` (note: since `SynchronizedRef` is not reactive (does not produces a stream of value changes), the resulting Lens' `changes` stream will only emit the current value of the lens when evaluated, and nothing else)
 
 More to come!
 
-You can also create Lenses manually by providing a getter, a stream of changes and either a `set` or `modify` depending on your needs:
+#### Manually
+You can also create Lenses manually using `make` by providing a getter, a stream of changes and either a `set` or `modify` function depending on your needs.
+
+You can get pretty creative! Here's an example of a Lens that points to a specific key of the browser `LocalStorage`:
+```typescript
+//      \/ Lens<Option.Option<string>, PlatformError, PlatformError, never, never>
+const lens = Effect.all([
+    KeyValueStore.KeyValueStore,
+    Effect.succeed("someKey"),
+]).pipe(
+    Effect.map(([kv, key]) => Lens.make({
+        get: kv.get(key),
+
+        changes: kv.get(key).pipe(
+            Effect.map(Stream.make),
+            Effect.map(a => Stream.concat(
+                a,
+                BrowserStream.fromEventListenerWindow("storage").pipe(
+                    Stream.filter(event => event.key === key),
+                    Stream.map(event => Option.fromNullable(event.newValue)),
+                ),
+            )),
+            Stream.unwrap,
+        ),
+
+        set: a => Option.isSome(a)
+            ? kv.set(key, a.value)
+            : kv.remove(key),
+    })),
+
+    Effect.provide(BrowserKeyValueStore.layerLocalStorage),
+    Lens.unwrap,
+)
+```
+
+Note: while Lens supports asynchronous effects for the proxy logic, we would recommend keeping them synchronous to preserve atomicity.
+
+
+### Focusing
