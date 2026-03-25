@@ -5,8 +5,8 @@ import { Lens } from "effect-lens"
 
 
 Effect.gen(function*() {
-    //      \/ Lens<Option.Option<string>, PlatformError, PlatformError, never, never>
-    const lens = Effect.all([
+    // \/ Lens<Option.Option<string>, PlatformError, PlatformError, never, never>
+    Effect.all([
         KeyValueStore.KeyValueStore,
         Effect.succeed("someKey"),
     ]).pipe(

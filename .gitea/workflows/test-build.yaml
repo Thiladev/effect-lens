@@ -23,5 +23,7 @@ jobs:
         run: bun lint:biome
       - name: Build
         run: bun run build
+      - name: Test
+        run: bun test
       - name: Pack
         run: bun pack

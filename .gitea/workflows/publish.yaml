@@ -21,6 +21,8 @@ jobs:
         run: bun lint:biome
       - name: Build
         run: bun run build
+      - name: Test
+        run: bun test
       # - name: Publish effect-lens
       #   uses: JS-DevTools/npm-publish@v4
       #   with:
