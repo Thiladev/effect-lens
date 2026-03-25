@@ -153,10 +153,43 @@ yield* Lens.set(
 Currently available:
 | Name | Description | Parent state mutation behavior | Notes |
 | - | - | - | - |
-| `Lens.focusField` | Focuses to the field of an object. Replaces the parent object immutably when writing to the focused field | Immutable | |
-| `Lens.focusMutableField` | Focuses to the field of an object. Mutates the parent object in place via the writable field | Mutable | Type-safe: will not allow you to mutate `readonly` fields |
-| `Lens.focusArrayAt` | Focuses to an indexed entry of an array. Replaces the parent array immutably when writing to the focused index | Immutable | |
-| `Lens.focusMutableArrayAt` | Focuses to an indexed entry of an array. Mutates the parent array in place at the focused index | Mutable | Type-safe: will not allow you to mutate `readonly` arrays |
-| `Lens.focusChunkAt` | Focuses to an indexed entry of a `Chunk`. Replaces the parent `Chunk` immutably when writing to the focused element | Immutable | |
+| `focusField` | Focuses to the field of an object. Replaces the parent object immutably when writing to the focused field | Immutable | |
+| `focusMutableField` | Focuses to the field of an object. Mutates the parent object in place via the writable field | Mutable | Type-safe: will not allow you to mutate `readonly` fields |
+| `focusArrayAt` | Focuses to an indexed entry of an array. Replaces the parent array immutably when writing to the focused index | Immutable | |
+| `focusMutableArrayAt` | Focuses to an indexed entry of an array. Mutates the parent array in place at the focused index | Mutable | Type-safe: will not allow you to mutate `readonly` arrays |
+| `focusChunkAt` | Focuses to an indexed entry of a `Chunk`. Replaces the parent `Chunk` immutably when writing to the focused element | Immutable | |
 
 Also more to come!
+
+#### Manually
+You can create focused Lenses by composing them manually using `map`, `mapEffect` and `unwrap`:
+```typescript
+interface User {
+    readonly name: string
+    readonly age: DateTime.Utc
+}
+
+const ref = yield* SubscriptionRef.make<readonly User[]>([
+    { name: "Jean Dupont", age: yield* DateTime.make("03/25/1969") },
+    { name: "Juan Joya Borja", age: yield* DateTime.make("04/05/1956") },
+    { name: "Benzemonstre", age: yield* DateTime.make("06/12/2000") },
+])
+
+//                  \/ Lens<User, NoSuchElementException, NoSuchElementException, never, never>
+const benzemonstreLens = ref.pipe(
+    Lens.fromSubscriptionRef,
+
+    // Manually focus
+    Lens.mapEffect(
+        // Getter:
+        Array.get(2),
+        // Setter:
+        (a, b) => Array.replaceOption(a, 2, b),
+    //   ^ The current Lens value (readonly User[])
+    //      ^ The new focused value to push (User)
+    ),
+)
+// Both Array.get and Array.replaceOption return an Option
+// When evaluated by the lens, Option<A> becomes Effect<A, NoSuchElementException>
+// As you can see, this is automatically tracked by the Lens type
+```
