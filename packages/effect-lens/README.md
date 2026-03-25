@@ -92,3 +92,62 @@ Note: while Lens supports asynchronous effects for the proxy logic, we would rec
 
 
 ### Focusing
+
+Lenses can focus on a nested part of the data type they point to.
+
+What does this mean? Let's say you have a Lens with this signature:
+```typescript
+Lens<{ readonly a: string, readonly b: number }, never, never, never, never>
+```
+
+*Focusing this Lens on `a`* means deriving a new Lens that points to the `a` field of the struct the current Lens points to, resulting in a:
+```typescript
+Lens<string, never, never, never, never>
+```
+
+Focuses Lenses work just the same as a Lens that points directly to a data source and can be read, subscribed to or written to.
+
+Writing to them will properly update parent Lenses or data sources. Such updates can be performed in both a mutable or an immutable manner depending on your choice.
+
+This is a very powerful pattern as it enables you to keep your state in some shared data store while allowing you to pass specific parts of that state to some parts of your application. Very useful for frontend development!
+
+#### Using built-in transforms
+We provide a few helpers to create focused Lenses:
+```typescript
+interface User {
+    readonly name: string
+    readonly age: DateTime.Utc
+}
+
+// The state of your app
+const ref = yield* SubscriptionRef.make<{
+    readonly users: readonly User[]
+}>({
+    users: [
+        { name: "Jean Dupont", age: yield* DateTime.make("03/25/1969") },
+        { name: "Juan Joya Borja", age: yield* DateTime.make("04/05/1956") },
+        { name: "Benzemonstre", age: yield* DateTime.make("06/12/2000") },
+    ]
+})
+
+//                \/ Lens<User, NoSuchElementException, NoSuchElementException, never, never>
+const jeanDupontLens = ref.pipe(
+    Lens.fromSubscriptionRef,  // Creates a lens that proxies the ref
+    Lens.focusField("users"),  // Creates a focused lens that points to the users field
+    Lens.focusArrayAt(0),      // Creates a focused lens that points to the first entry of the user array
+)
+// Reading or writing from this lense can fail with NoSuchElementException
+// This is because of Lens.focusArrayAt(0), as reading and writing to an array is an unsafe operation
+
+const jeanDupont = yield* Lens.get(jeanDupontLens)
+
+yield* Lens.set(
+    // You can focus even further down
+    Lens.focusField(jeanDupontLens, "age"),
+    yield* DateTime.make("03/25/1970"),
+)
+// Mutations with the parent state are performed immutably by default
+// unless you use a specific mutable transform such as 'focusMutableField'
+```
+
+Currently available:
