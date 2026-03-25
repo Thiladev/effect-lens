@@ -1,8 +1,0 @@
-{
-  "$schema": "https://biomejs.dev/schemas/latest/schema.json",
-  "root": false,
-  "extends": "//",
-  "files": {
-    "includes": ["./src/**"]
-  }
-}
