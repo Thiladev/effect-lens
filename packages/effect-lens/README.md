@@ -4,6 +4,13 @@ A Lens type for [Effect](https://effect.website/) to easily manage nested state.
 
 A proper documentation is currently being written. In the meantime, you can take a look at the quickstart below and at the `packages/example` directory.
 
+## Install
+```
+npm install effect-lens
+yarn add effect-lens
+bun add effect-lens
+```
+
 ## Peer dependencies
 - `effect` 3.21+
 
@@ -193,3 +200,38 @@ const benzemonstreLens = ref.pipe(
 // When evaluated by the lens, Option<A> becomes Effect<A, NoSuchElementException>
 // As you can see, this is automatically tracked by the Lens type
 ```
+
+
+### Subscribable
+
+Lens implements both Effect's `Subscribable` and `Readable`, which you can use as a constraint to allow some parts of your app to only read and subscribe to the Lenses you provide them:
+```typescript
+const ref = yield* SubscriptionRef.make<{
+    readonly users: readonly User[]
+}>({ users: [...] })
+
+const someFunctionThatShouldOnlyHaveReadonlyAccessToTheState = (
+    usersSub: Subscribable.Subscribable<readonly User[], never, never>
+) => Effect.gen(function*() {
+    // Do whatever
+    const usersCountSub = Subscribable.map(usersSub, a => a.length)
+    const users = yield* usersSub.get
+    yield* Effect.forkScoped(Stream.runForEach(users.changes, ...))
+})
+
+const lens = ref.pipe(
+    Lens.fromSubscriptionRef,
+    Lens.focusField("users"),
+)
+yield* someFunctionThatShouldOnlyHaveReadonlyAccessToTheState(lens)
+```
+
+
+## Todo
+
+This library is already ready to use! However, there is always more to do...
+- Finish those docs
+- Provide an API reference
+- Add new adapters for various data source types
+- Add new focus transforms
+- Provide a preview version for Effect 4 beta
