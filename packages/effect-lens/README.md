@@ -2,8 +2,6 @@
 
 A Lens type for [Effect](https://effect.website/) to easily manage nested state.
 
-A proper documentation is currently being written. In the meantime, you can take a look at the quickstart below and at the `packages/example` directory.
-
 ## Install
 ```
 npm install effect-lens
@@ -140,7 +138,7 @@ const ref = yield* SubscriptionRef.make<{
 //                \/ Lens<User, NoSuchElementException, NoSuchElementException, never, never>
 const jeanDupontLens = ref.pipe(
     Lens.fromSubscriptionRef,  // Creates a lens that proxies the ref
-    Lens.focusField("users"),  // Creates a focused lens that points to the users field
+    Lens.focusObjectField("users"),  // Creates a focused lens that points to the users field
     Lens.focusArrayAt(0),      // Creates a focused lens that points to the first entry of the user array
 )
 // Reading or writing from this lense can fail with NoSuchElementException
@@ -150,7 +148,7 @@ const jeanDupont = yield* Lens.get(jeanDupontLens)
 
 yield* Lens.set(
     // You can focus even further down
-    Lens.focusField(jeanDupontLens, "age"),
+    Lens.focusObjectField(jeanDupontLens, "age"),
     yield* DateTime.make("03/25/1970"),
 )
 // Mutations with the parent state are performed immutably by default
@@ -160,10 +158,12 @@ yield* Lens.set(
 Currently available:
 | Name | Description | Parent state mutation behavior | Notes |
 | - | - | - | - |
-| `focusField` | Focuses to the field of an object. Replaces the parent object immutably when writing to the focused field | Immutable | |
-| `focusMutableField` | Focuses to the field of an object. Mutates the parent object in place via the writable field | Mutable | Type-safe: will not allow you to mutate `readonly` fields |
+| `focusObjectField` | Focuses to the field of an object. Replaces the parent object immutably when writing to the focused field | Immutable | |
+| `focusObjectMutableField` | Focuses to the writable field of an object. Mutates the parent object in place via the writable field | Mutable | Type-safe: will not allow you to mutate `readonly` fields |
 | `focusArrayAt` | Focuses to an indexed entry of an array. Replaces the parent array immutably when writing to the focused index | Immutable | |
 | `focusMutableArrayAt` | Focuses to an indexed entry of an array. Mutates the parent array in place at the focused index | Mutable | Type-safe: will not allow you to mutate `readonly` arrays |
+| `focusTupleAt` | Focuses to an indexed entry of a readonly tuple. Replaces the parent tuple immutably when writing to the focused index | Immutable | |
+| `focusMutableTupleAt` | Focuses to an indexed entry of a mutable tuple. Mutates the parent tuple in place at the focused index | Mutable | Type-safe: will not allow you to mutate `readonly` tuples |
 | `focusChunkAt` | Focuses to an indexed entry of a `Chunk`. Replaces the parent `Chunk` immutably when writing to the focused element | Immutable | |
 
 Also more to come!
@@ -171,11 +171,6 @@ Also more to come!
 #### Manually
 You can create focused Lenses by composing them manually using `map`, `mapEffect` and `unwrap`:
 ```typescript
-interface User {
-    readonly name: string
-    readonly age: DateTime.Utc
-}
-
 const ref = yield* SubscriptionRef.make<readonly User[]>([
     { name: "Jean Dupont", age: yield* DateTime.make("03/25/1969") },
     { name: "Juan Joya Borja", age: yield* DateTime.make("04/05/1956") },
@@ -221,10 +216,32 @@ const someFunctionThatShouldOnlyHaveReadonlyAccessToTheState = (
 
 const lens = ref.pipe(
     Lens.fromSubscriptionRef,
-    Lens.focusField("users"),
+    Lens.focusObjectField("users"),
 )
 yield* someFunctionThatShouldOnlyHaveReadonlyAccessToTheState(lens)
 ```
+
+#### Focusing
+This library re-exports Effect's `Subscribable` module and adds a few transforms to narrow the focus of `Subscribable`'s, same as Lenses:
+```typescript
+import { Subscribable } from "effect-lens"
+
+declare const sub: Subscribabe.Subscribable<readonly { name: string }[], never, never>
+
+//         \/ Subscribabe.Subscribable<string, NoSuchElementException, never>
+const nameSub = sub.pipe(
+    Subscribable.focusArrayAt(1),
+    Subscribable.focusObjectField("name"),
+)
+```
+
+Currently available:
+| Name | Description |
+| - | - |
+| `focusObjectField` | Focuses to the field of an object |
+| `focusArrayAt` | Focuses to an indexed entry of an array |
+| `focusTupleAt` | Focuses to an indexed entry of a tuple |
+| `focusChunkAt` | Focuses to an indexed entry of a `Chunk` |
 
 
 ## Todo

@@ -4,12 +4,12 @@ import * as Lens from "./Lens.js"
 
 
 describe("Lens", () => {
-    test("focusField focuses a nested property without touching other fields", async () => {
+    test("focusObjectField focuses a nested property without touching other fields", async () => {
         const [initialCount, updatedState] = await Effect.runPromise(
             Effect.flatMap(
                 SubscriptionRef.make({ count: 1, label: "original" }),
                 parent => {
-                    const countLens = Lens.focusField(Lens.fromSubscriptionRef(parent), "count")
+                    const countLens = Lens.focusObjectField(Lens.fromSubscriptionRef(parent), "count")
                     return Effect.flatMap(
                         Lens.get(countLens),
                         count => Effect.flatMap(
@@ -25,13 +25,13 @@ describe("Lens", () => {
         expect(updatedState).toEqual({ count: 6, label: "original" })
     })
 
-    test("focusMutableField preserves the root identity when mutating in place", async () => {
+    test("focusObjectMutableField preserves the root identity when mutating in place", async () => {
         const original = { detail: "keep" }
         const updated = await Effect.runPromise(
             Effect.flatMap(
                 SubscriptionRef.make(original),
                 parent => {
-                    const detailLens = Lens.focusMutableField(Lens.fromSubscriptionRef(parent), "detail")
+                    const detailLens = Lens.focusObjectMutableField(Lens.fromSubscriptionRef(parent), "detail")
                     return Effect.flatMap(
                         Lens.set(detailLens, "mutated"),
                         () => parent.get,
@@ -68,6 +68,42 @@ describe("Lens", () => {
                 SubscriptionRef.make(original),
                 parent => {
                     const elementLens = Lens.focusMutableArrayAt(Lens.fromSubscriptionRef(parent), 0)
+                    return Effect.flatMap(
+                        Lens.set(elementLens, "baz"),
+                        () => parent.get,
+                    )
+                },
+            ),
+        )
+
+        expect(updated).toBe(original)
+        expect(updated).toEqual(["baz", "bar"])
+    })
+
+    test("focusTupleAt updates the selected tuple index immutably", async () => {
+        const updated = await Effect.runPromise(
+            Effect.flatMap(
+                SubscriptionRef.make<readonly [string, string, string]>(["a", "b", "c"]),
+                parent => {
+                    const elementLens = Lens.focusTupleAt(Lens.fromSubscriptionRef(parent), 1)
+                    return Effect.flatMap(
+                        Lens.set(elementLens, "updated"),
+                        () => parent.get,
+                    )
+                },
+            ),
+        )
+
+        expect(updated).toEqual(["a", "updated", "c"])
+    })
+
+    test("focusMutableTupleAt mutates the tuple reference in place", async () => {
+        const original: [string, string] = ["foo", "bar"]
+        const updated = await Effect.runPromise(
+            Effect.flatMap(
+                SubscriptionRef.make(original),
+                parent => {
+                    const elementLens = Lens.focusMutableTupleAt(Lens.fromSubscriptionRef(parent), 0)
                     return Effect.flatMap(
                         Lens.set(elementLens, "baz"),
                         () => parent.get,

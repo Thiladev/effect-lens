@@ -1,5 +1,6 @@
-import { Array, Chunk, Effect, Function, Pipeable, Predicate, Readable, Stream, Subscribable, type SubscriptionRef, type SynchronizedRef } from "effect"
+import { Array, Chunk, Effect, Function, Pipeable, Predicate, Readable, Stream, type SubscriptionRef, type SynchronizedRef } from "effect"
 import type { NoSuchElementException } from "effect/Cause"
+import * as Subscribable from "./Subscribable.js"
 
 
 export const LensTypeId: unique symbol = Symbol.for("@effect-fc/Lens/Lens")
@@ -206,7 +207,7 @@ export const mapStream: {
 /**
  * Narrows the focus to a field of an object. Replaces the object in an immutable fashion when written to.
  */
-export const focusField: {
+export const focusObjectField: {
     <A extends object, K extends keyof A, ER, EW, RR, RW>(
         self: Lens<A, ER, EW, RR, RW>,
         key: K,
@@ -223,7 +224,7 @@ export const focusField: {
     (a, b) => Object.setPrototypeOf({ ...a, [key]: b }, Object.getPrototypeOf(a)),
 ))
 
-export declare namespace focusMutableField {
+export declare namespace focusObjectMutableField {
     export type WritableKeys<T> = {
         [K in keyof T]-?: IfEquals<
             { [P in K]: T[K] },
@@ -239,15 +240,15 @@ export declare namespace focusMutableField {
 /**
  * Narrows the focus to a mutable field of an object. Mutates the object in place when written to.
  */
-export const focusMutableField: {
-    <A extends object, K extends focusMutableField.WritableKeys<A>, ER, EW, RR, RW>(
+export const focusObjectMutableField: {
+    <A extends object, K extends focusObjectMutableField.WritableKeys<A>, ER, EW, RR, RW>(
         self: Lens<A, ER, EW, RR, RW>,
         key: K,
     ): Lens<A[K], ER, EW, RR, RW>
-    <A extends object, K extends focusMutableField.WritableKeys<A>, ER, EW, RR, RW>(
+    <A extends object, K extends focusObjectMutableField.WritableKeys<A>, ER, EW, RR, RW>(
         key: K,
     ): (self: Lens<A, ER, EW, RR, RW>) => Lens<A[K], ER, EW, RR, RW>
-} = Function.dual(2, <A extends object, K extends focusMutableField.WritableKeys<A>, ER, EW, RR, RW>(
+} = Function.dual(2, <A extends object, K extends focusObjectMutableField.WritableKeys<A>, ER, EW, RR, RW>(
     self: Lens<A, ER, EW, RR, RW>,
     key: K,
 ): Lens<A[K], ER, EW, RR, RW> => map(self, a => a[key], (a, b) => { a[key] = b; return a }))
@@ -259,7 +260,7 @@ export const focusArrayAt: {
     <A extends readonly any[], ER, EW, RR, RW>(
         self: Lens<A, ER, EW, RR, RW>,
         index: number,
-    ): Lens<A[number]>
+    ): Lens<A[number], ER | NoSuchElementException, EW | NoSuchElementException, RR, RW>
     <A extends readonly any[], ER, EW, RR, RW>(
         index: number
     ): (self: Lens<A, ER, EW, RR, RW>) => Lens<A[number], ER | NoSuchElementException, EW | NoSuchElementException, RR, RW>
@@ -293,6 +294,46 @@ export const focusMutableArrayAt: {
         Array.get(a, index),
         () => Effect.as(Effect.sync(() => { a[index] = b }), a),
     ),
+))
+
+/**
+ * Narrows the focus to an indexed element of a readonly tuple. Replaces the tuple in an immutable fashion when written to.
+ */
+export const focusTupleAt: {
+    <T extends readonly [any, ...any[]], I extends number, ER, EW, RR, RW>(
+        self: Lens<T, ER, EW, RR, RW>,
+        index: I,
+    ): Lens<T[I], ER, EW, RR, RW>
+    <T extends readonly [any, ...any[]], I extends number, ER, EW, RR, RW>(
+        index: I
+    ): (self: Lens<T, ER, EW, RR, RW>) => Lens<T[I], ER, EW, RR, RW>
+} = Function.dual(2, <T extends readonly [any, ...any[]], I extends number, ER, EW, RR, RW>(
+    self: Lens<T, ER, EW, RR, RW>,
+    index: I,
+): Lens<T[I], ER, EW, RR, RW> => map(
+    self,
+    Array.unsafeGet(index),
+    (a, b) => Array.replace(a, index, b) as any,
+))
+
+/**
+ * Narrows the focus to an indexed element of a mutable tuple. Mutates the tuple in place when written to.
+ */
+export const focusMutableTupleAt: {
+    <T extends [any, ...any[]], I extends number, ER, EW, RR, RW>(
+        self: Lens<T, ER, EW, RR, RW>,
+        index: I,
+    ): Lens<T[I], ER, EW, RR, RW>
+    <T extends [any, ...any[]], I extends number, ER, EW, RR, RW>(
+        index: I
+    ): (self: Lens<T, ER, EW, RR, RW>) => Lens<T[I], ER, EW, RR, RW>
+} = Function.dual(2, <T extends [any, ...any[]], I extends number, ER, EW, RR, RW>(
+    self: Lens<T, ER, EW, RR, RW>,
+    index: I,
+): Lens<T[I], ER, EW, RR, RW> => map(
+    self,
+    Array.unsafeGet(index),
+    (a, b) => { a[index] = b; return a },
 ))
 
 /**
