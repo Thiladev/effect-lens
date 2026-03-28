@@ -1,4 +1,4 @@
-import { Array, Chunk, Effect, Function, Pipeable, Predicate, Readable, Stream, type SubscriptionRef, type SynchronizedRef } from "effect"
+import { Array, Chunk, Effect, Function, Option, Pipeable, Predicate, Readable, Stream, type SubscriptionRef, type SynchronizedRef } from "effect"
 import type { NoSuchElementException } from "effect/Cause"
 import * as Subscribable from "./Subscribable.js"
 
@@ -182,6 +182,72 @@ export const mapEffect: {
         )
     )),
 }))
+
+/**
+ * Derives a new `Lens` by applying synchronous getters and setters over the value inside an `Option`.
+ *
+ * Similar to `Option.map`, this preserves the `Option` structure:
+ * - If the `Option` is `Some(a)`, applies the getter and setter to the inner value
+ * - If the `Option` is `None`, it remains `None`
+ */
+export const mapOption: {
+    <A, ER, EW, RR, RW, B>(
+        self: Lens<Option.Option<A>, ER, EW, RR, RW>,
+        get: (a: NoInfer<A>) => B,
+        set: (a: NoInfer<A>, b: B) => NoInfer<A>,
+    ): Lens<Option.Option<B>, ER, EW, RR, RW>
+    <A, ER, EW, RR, RW, B>(
+        get: (a: NoInfer<A>) => B,
+        set: (a: NoInfer<A>, b: B) => NoInfer<A>,
+    ): (self: Lens<Option.Option<A>, ER, EW, RR, RW>) => Lens<Option.Option<B>, ER, EW, RR, RW>
+} = Function.dual(3, <A, ER, EW, RR, RW, B>(
+    self: Lens<Option.Option<A>, ER, EW, RR, RW>,
+    get: (a: NoInfer<A>) => B,
+    set: (a: NoInfer<A>, b: B) => NoInfer<A>,
+): Lens<Option.Option<B>, ER, EW, RR, RW> => map(
+    self,
+    Option.map(get),
+    (opt, newOpt) => Option.match(opt, {
+        onSome: a => Option.map(newOpt, b => set(a, b)),
+        onNone: () => Option.none(),
+    }),
+))
+
+/**
+ * Derives a new `Lens` by applying effectful getters and setters over the value inside an `Option`.
+ *
+ * Similar to `Option.map`, this preserves the `Option` structure:
+ * - If the `Option` is `Some(a)`, applies the effectful getter and setter to the inner value
+ * - If the `Option` is `None`, it remains `None`
+ */
+export const mapOptionEffect: {
+    <A, ER, EW, RR, RW, B, EGet = never, RGet = never, ESet = never, RSet = never>(
+        self: Lens<Option.Option<A>, ER, EW, RR, RW>,
+        get: (a: NoInfer<A>) => Effect.Effect<B, EGet, RGet>,
+        set: (a: NoInfer<A>, b: B) => Effect.Effect<NoInfer<A>, ESet, RSet>,
+    ): Lens<Option.Option<B>, ER | EGet, EW | ESet, RR | RGet, RW | RSet>
+    <A, ER, EW, RR, RW, B, EGet = never, RGet = never, ESet = never, RSet = never>(
+        get: (a: NoInfer<A>) => Effect.Effect<B, EGet, RGet>,
+        set: (a: NoInfer<A>, b: B) => Effect.Effect<NoInfer<A>, ESet, RSet>,
+    ): (self: Lens<Option.Option<A>, ER, EW, RR, RW>) => Lens<Option.Option<B>, ER | EGet, EW | ESet, RR | RGet, RW | RSet>
+} = Function.dual(3, <A, ER, EW, RR, RW, B, EGet = never, RGet = never, ESet = never, RSet = never>(
+    self: Lens<Option.Option<A>, ER, EW, RR, RW>,
+    get: (a: NoInfer<A>) => Effect.Effect<B, EGet, RGet>,
+    set: (a: NoInfer<A>, b: B) => Effect.Effect<NoInfer<A>, ESet, RSet>,
+): Lens<Option.Option<B>, ER | EGet, EW | ESet, RR | RGet, RW | RSet> => mapEffect(
+    self,
+    Option.match({
+        onSome: a => Effect.map(get(a), Option.some),
+        onNone: () => Effect.succeed(Option.none()),
+    }),
+    (opt, newOpt) => Option.match(opt, {
+        onSome: a => Option.match(newOpt, {
+            onSome: b => Effect.map(set(a, b), Option.some),
+            onNone: () => Effect.succeed(Option.none()),
+        }),
+        onNone: () => Effect.succeed(Option.none()),
+    }),
+))
 
 /**
  * Allows transforming only the `changes` stream of a `Lens` while keeping the focus type intact.

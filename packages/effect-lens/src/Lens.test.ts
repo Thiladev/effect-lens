@@ -1,9 +1,59 @@
 import { describe, expect, test } from "bun:test"
-import { Chunk, Effect, SubscriptionRef } from "effect"
+import { Chunk, Effect, Option, SubscriptionRef } from "effect"
 import * as Lens from "./Lens.js"
 
 
 describe("Lens", () => {
+    test("mapOption transforms Some values and preserves None", async () => {
+        const result = await Effect.runPromise(
+            Effect.flatMap(
+                SubscriptionRef.make<Option.Option<number>>(Option.some(42)),
+                parent => {
+                    const lens = Lens.mapOption(
+                        Lens.fromSubscriptionRef(parent),
+                        n => n * 2,
+                        (_n, doubled) => doubled / 2,
+                    )
+                    return Effect.flatMap(
+                        Lens.get(lens),
+                        value => Effect.flatMap(
+                            Lens.set(lens, Option.some(100)),
+                            () => Effect.map(parent.get, parentValue => [value, parentValue] as const),
+                        ),
+                    )
+                },
+            ),
+        )
+
+        expect(result[0]).toEqual(Option.some(84)) // 42 * 2
+        expect(result[1]).toEqual(Option.some(50)) // 100 / 2
+    })
+
+    test("mapOptionEffect transforms Some values with effects", async () => {
+        const result = await Effect.runPromise(
+            Effect.flatMap(
+                SubscriptionRef.make<Option.Option<number>>(Option.some(42)),
+                parent => {
+                    const lens = Lens.mapOptionEffect(
+                        Lens.fromSubscriptionRef(parent),
+                        n => Effect.succeed(n * 2),
+                        (_n, doubled) => Effect.succeed(doubled / 2),
+                    )
+                    return Effect.flatMap(
+                        Lens.get(lens),
+                        value => Effect.flatMap(
+                            Lens.set(lens, Option.some(100)),
+                            () => Effect.map(parent.get, parentValue => [value, parentValue] as const),
+                        ),
+                    )
+                },
+            ),
+        )
+
+        expect(result[0]).toEqual(Option.some(84)) // 42 * 2
+        expect(result[1]).toEqual(Option.some(50)) // 100 / 2
+    })
+
     test("focusObjectField focuses a nested property without touching other fields", async () => {
         const [initialCount, updatedState] = await Effect.runPromise(
             Effect.flatMap(
