@@ -1,8 +1,43 @@
-import { Array, Chunk, Function, Subscribable } from "effect"
+import { Array, Chunk, Effect, Function, Option, Subscribable } from "effect"
 import type { NoSuchElementException } from "effect/Cause"
 
 
 export * from "effect/Subscribable"
+
+/**
+ * Maps over an `Option` value in the `Subscribable`.
+ */
+export const mapOption: {
+    <A, B, E, R>(
+        self: Subscribable.Subscribable<Option.Option<A>, E, R>,
+        f: (a: A) => B,
+    ): Subscribable.Subscribable<Option.Option<B>, E, R>
+    <A, B>(
+        f: (a: A) => B,
+    ): <E, R>(self: Subscribable.Subscribable<Option.Option<A>, E, R>) => Subscribable.Subscribable<Option.Option<B>, E, R>
+} = Function.dual(2, <A, B, E, R>(
+    self: Subscribable.Subscribable<Option.Option<A>, E, R>,
+    f: (a: A) => B,
+): Subscribable.Subscribable<Option.Option<B>, E, R> => Subscribable.map(self, Option.map(f)))
+
+/**
+ * Maps over an `Option` value in the `Subscribable` with an Effect.
+ */
+export const mapOptionEffect: {
+    <A, B, E, E2, R>(
+        self: Subscribable.Subscribable<Option.Option<A>, E, R>,
+        f: (a: A) => Effect.Effect<B, E2, R>,
+    ): Subscribable.Subscribable<Option.Option<B>, E | E2, R>
+    <A, B, E2>(
+        f: (a: A) => Effect.Effect<B, E2>,
+    ): <E, R>(self: Subscribable.Subscribable<Option.Option<A>, E, R>) => Subscribable.Subscribable<Option.Option<B>, E | E2, R>
+} = Function.dual(2, <A, B, E, E2, R>(
+    self: Subscribable.Subscribable<Option.Option<A>, E, R>,
+    f: (a: A) => Effect.Effect<B, E2, R>,
+): Subscribable.Subscribable<Option.Option<B>, E | E2, R> => Subscribable.mapEffect(self, Option.match({
+    onSome: a => Effect.map(f(a), Option.some),
+    onNone: () => Effect.succeed(Option.none()),
+})))
 
 /**
  * Narrows the focus to a field of an object.

@@ -274,14 +274,14 @@ export const mapStream: {
  * Narrows the focus to a field of an object. Replaces the object in an immutable fashion when written to.
  */
 export const focusObjectField: {
-    <A extends object, K extends keyof A, ER, EW, RR, RW>(
+    <A extends object, ER, EW, RR, RW, K extends keyof A>(
         self: Lens<A, ER, EW, RR, RW>,
         key: K,
     ): Lens<A[K], ER, EW, RR, RW>
-    <A extends object, K extends keyof A, ER, EW, RR, RW>(
+    <A extends object, ER, EW, RR, RW, K extends keyof A>(
         key: K,
     ): (self: Lens<A, ER, EW, RR, RW>) => Lens<A[K], ER, EW, RR, RW>
-} = Function.dual(2, <A extends object, K extends keyof A, ER, EW, RR, RW>(
+} = Function.dual(2, <A extends object, ER, EW, RR, RW, K extends keyof A>(
     self: Lens<A, ER, EW, RR, RW>,
     key: K,
 ): Lens<A[K], ER, EW, RR, RW> => map(
@@ -307,14 +307,14 @@ export declare namespace focusObjectMutableField {
  * Narrows the focus to a mutable field of an object. Mutates the object in place when written to.
  */
 export const focusObjectMutableField: {
-    <A extends object, K extends focusObjectMutableField.WritableKeys<A>, ER, EW, RR, RW>(
+    <A extends object, ER, EW, RR, RW, K extends focusObjectMutableField.WritableKeys<A>>(
         self: Lens<A, ER, EW, RR, RW>,
         key: K,
     ): Lens<A[K], ER, EW, RR, RW>
-    <A extends object, K extends focusObjectMutableField.WritableKeys<A>, ER, EW, RR, RW>(
+    <A extends object, ER, EW, RR, RW, K extends focusObjectMutableField.WritableKeys<A>>(
         key: K,
     ): (self: Lens<A, ER, EW, RR, RW>) => Lens<A[K], ER, EW, RR, RW>
-} = Function.dual(2, <A extends object, K extends focusObjectMutableField.WritableKeys<A>, ER, EW, RR, RW>(
+} = Function.dual(2, <A extends object, ER, EW, RR, RW, K extends focusObjectMutableField.WritableKeys<A>>(
     self: Lens<A, ER, EW, RR, RW>,
     key: K,
 ): Lens<A[K], ER, EW, RR, RW> => map(self, a => a[key], (a, b) => { a[key] = b; return a }))
@@ -366,14 +366,14 @@ export const focusMutableArrayAt: {
  * Narrows the focus to an indexed element of a readonly tuple. Replaces the tuple in an immutable fashion when written to.
  */
 export const focusTupleAt: {
-    <T extends readonly [any, ...any[]], I extends number, ER, EW, RR, RW>(
+    <T extends readonly [any, ...any[]], ER, EW, RR, RW, I extends number>(
         self: Lens<T, ER, EW, RR, RW>,
         index: I,
     ): Lens<T[I], ER, EW, RR, RW>
-    <T extends readonly [any, ...any[]], I extends number, ER, EW, RR, RW>(
+    <T extends readonly [any, ...any[]], ER, EW, RR, RW, I extends number>(
         index: I
     ): (self: Lens<T, ER, EW, RR, RW>) => Lens<T[I], ER, EW, RR, RW>
-} = Function.dual(2, <T extends readonly [any, ...any[]], I extends number, ER, EW, RR, RW>(
+} = Function.dual(2, <T extends readonly [any, ...any[]], ER, EW, RR, RW, I extends number>(
     self: Lens<T, ER, EW, RR, RW>,
     index: I,
 ): Lens<T[I], ER, EW, RR, RW> => map(
@@ -386,14 +386,14 @@ export const focusTupleAt: {
  * Narrows the focus to an indexed element of a mutable tuple. Mutates the tuple in place when written to.
  */
 export const focusMutableTupleAt: {
-    <T extends [any, ...any[]], I extends number, ER, EW, RR, RW>(
+    <T extends [any, ...any[]], ER, EW, RR, RW, I extends number>(
         self: Lens<T, ER, EW, RR, RW>,
         index: I,
     ): Lens<T[I], ER, EW, RR, RW>
-    <T extends [any, ...any[]], I extends number, ER, EW, RR, RW>(
+    <T extends [any, ...any[]], ER, EW, RR, RW, I extends number>(
         index: I
     ): (self: Lens<T, ER, EW, RR, RW>) => Lens<T[I], ER, EW, RR, RW>
-} = Function.dual(2, <T extends [any, ...any[]], I extends number, ER, EW, RR, RW>(
+} = Function.dual(2, <T extends [any, ...any[]], ER, EW, RR, RW, I extends number>(
     self: Lens<T, ER, EW, RR, RW>,
     index: I,
 ): Lens<T[I], ER, EW, RR, RW> => map(
