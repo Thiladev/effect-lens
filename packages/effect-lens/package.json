@@ -1,7 +1,7 @@
 {
   "name": "effect-lens",
   "description": "An effectful Lens type to easily manage nested state",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "type": "module",
   "files": [
     "./README.md",
@@ -20,10 +20,6 @@
     "./Lens": {
       "types": "./dist/Lens.d.ts",
       "default": "./dist/Lens.js"
-    },
-    "./PropertyPath": {
-      "types": "./dist/PropertyPath.d.ts",
-      "default": "./dist/PropertyPath.js"
     },
     "./Subscribable": {
       "types": "./dist/Subscribable.d.ts",

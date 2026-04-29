@@ -36,13 +36,13 @@ Lens<
 
 ### Creating a Lens
 
-#### From an exisiting type
+#### From an existing type
 We provide a few helpers to create Lenses from some Effect types:
 ```typescript
 // The ref is the data source
 const ref = yield* SubscriptionRef.make([12, 87, 69])
 
-// The lens acts as a proxy that allows reading, subscribing from and writing to that
+// The lens acts as a proxy that allows reading, subscribing to and writing to that
 // data source with a similar API to Effect's SubscriptionRef
 const lens = Lens.fromSubscriptionRef(ref)
 //       ^ Lens.Lens<number[], never, never, never, never>
@@ -54,7 +54,7 @@ yield* Lens.update(lens, Array.replace(1, 1664))
 
 Currently available:
 - `fromSubscriptionRef`
-- `fromSynchronizedRef` (note: since `SynchronizedRef` is not reactive (does not produces a stream of value changes), the resulting Lens' `changes` stream will only emit the current value of the lens when evaluated, and nothing else)
+- `fromSynchronizedRef` (note: since `SynchronizedRef` is not reactive (does not produce a stream of value changes), the resulting Lens' `changes` stream will only emit the current value of the lens when evaluated, and nothing else)
 
 More to come!
 
@@ -110,7 +110,7 @@ Lens<{ readonly a: string, readonly b: number }, never, never, never, never>
 Lens<string, never, never, never, never>
 ```
 
-Focuses Lenses work just the same as a Lens that points directly to a data source and can be read, subscribed to or written to.
+Focused Lenses work just the same as a Lens that points directly to a data source and can be read, subscribed to or written to.
 
 Writing to them will properly update parent Lenses or data sources. Such updates can be performed in both a mutable or an immutable manner depending on your choice.
 
@@ -137,29 +137,29 @@ const ref = yield* SubscriptionRef.make<{
 
 //                \/ Lens<User, NoSuchElementException, NoSuchElementException, never, never>
 const jeanDupontLens = ref.pipe(
-    Lens.fromSubscriptionRef,  // Creates a lens that proxies the ref
-    Lens.focusObjectField("users"),  // Creates a focused lens that points to the users field
-    Lens.focusArrayAt(0),      // Creates a focused lens that points to the first entry of the user array
+    Lens.fromSubscriptionRef,     // Creates a lens that proxies the ref
+    Lens.focusObjectOn("users"),  // Creates a focused lens that points to the users field
+    Lens.focusArrayAt(0),         // Creates a focused lens that points to the first entry of the user array
 )
-// Reading or writing from this lense can fail with NoSuchElementException
+// Reading or writing from this lens can fail with NoSuchElementException
 // This is because of Lens.focusArrayAt(0), as reading and writing to an array is an unsafe operation
 
 const jeanDupont = yield* Lens.get(jeanDupontLens)
 
 yield* Lens.set(
     // You can focus even further down
-    Lens.focusObjectField(jeanDupontLens, "age"),
+    Lens.focusObjectOn(jeanDupontLens, "age"),
     yield* DateTime.make("03/25/1970"),
 )
 // Mutations with the parent state are performed immutably by default
-// unless you use a specific mutable transform such as 'focusMutableField'
+// unless you use a specific mutable transform such as 'focusObjectOnWritable'
 ```
 
 Currently available:
 | Name | Description | Parent state mutation behavior | Notes |
 | - | - | - | - |
-| `focusObjectField` | Focuses to the field of an object. Replaces the parent object immutably when writing to the focused field | Immutable | |
-| `focusObjectMutableField` | Focuses to the writable field of an object. Mutates the parent object in place via the writable field | Mutable | Type-safe: will not allow you to mutate `readonly` fields |
+| `focusObjectOn` | Focuses to a field of an object. Replaces the parent object immutably when writing to the focused field | Immutable | |
+| `focusObjectOnWritable` | Focuses to a writable field of an object. Mutates the parent object in place via the writable field | Mutable | Type-safe: will not allow you to mutate `readonly` fields |
 | `focusArrayAt` | Focuses to an indexed entry of an array. Replaces the parent array immutably when writing to the focused index | Immutable | |
 | `focusMutableArrayAt` | Focuses to an indexed entry of an array. Mutates the parent array in place at the focused index | Mutable | Type-safe: will not allow you to mutate `readonly` arrays |
 | `focusTupleAt` | Focuses to an indexed entry of a readonly tuple. Replaces the parent tuple immutably when writing to the focused index | Immutable | |
@@ -211,12 +211,12 @@ const someFunctionThatShouldOnlyHaveReadonlyAccessToTheState = (
     // Do whatever
     const usersCountSub = Subscribable.map(usersSub, a => a.length)
     const users = yield* usersSub.get
-    yield* Effect.forkScoped(Stream.runForEach(users.changes, ...))
+    yield* Effect.forkScoped(Stream.runForEach(usersSub.changes, ...))
 })
 
 const lens = ref.pipe(
     Lens.fromSubscriptionRef,
-    Lens.focusObjectField("users"),
+    Lens.focusObjectOn("users"),
 )
 yield* someFunctionThatShouldOnlyHaveReadonlyAccessToTheState(lens)
 ```
@@ -226,19 +226,19 @@ This library re-exports Effect's `Subscribable` module and adds a few transforms
 ```typescript
 import { Subscribable } from "effect-lens"
 
-declare const sub: Subscribabe.Subscribable<readonly { name: string }[], never, never>
+declare const sub: Subscribable.Subscribable<readonly { name: string }[], never, never>
 
-//         \/ Subscribabe.Subscribable<string, NoSuchElementException, never>
+//         \/ Subscribable.Subscribable<string, NoSuchElementException, never>
 const nameSub = sub.pipe(
     Subscribable.focusArrayAt(1),
-    Subscribable.focusObjectField("name"),
+    Subscribable.focusObjectOn("name"),
 )
 ```
 
 Currently available:
 | Name | Description |
 | - | - |
-| `focusObjectField` | Focuses to the field of an object |
+| `focusObjectOn` | Focuses to the field of an object |
 | `focusArrayAt` | Focuses to an indexed entry of an array |
 | `focusTupleAt` | Focuses to an indexed entry of a tuple |
 | `focusChunkAt` | Focuses to an indexed entry of a `Chunk` |

@@ -54,12 +54,12 @@ describe("Lens", () => {
         expect(result[1]).toEqual(Option.some(50)) // 100 / 2
     })
 
-    test("focusObjectField focuses a nested property without touching other fields", async () => {
+    test("focusObjectOn focuses a nested property without touching other fields", async () => {
         const [initialCount, updatedState] = await Effect.runPromise(
             Effect.flatMap(
                 SubscriptionRef.make({ count: 1, label: "original" }),
                 parent => {
-                    const countLens = Lens.focusObjectField(Lens.fromSubscriptionRef(parent), "count")
+                    const countLens = Lens.focusObjectOn(Lens.fromSubscriptionRef(parent), "count")
                     return Effect.flatMap(
                         Lens.get(countLens),
                         count => Effect.flatMap(
@@ -75,13 +75,13 @@ describe("Lens", () => {
         expect(updatedState).toEqual({ count: 6, label: "original" })
     })
 
-    test("focusObjectMutableField preserves the root identity when mutating in place", async () => {
+    test("focusObjectOnWritable preserves the root identity when mutating in place", async () => {
         const original = { detail: "keep" }
         const updated = await Effect.runPromise(
             Effect.flatMap(
                 SubscriptionRef.make(original),
                 parent => {
-                    const detailLens = Lens.focusObjectMutableField(Lens.fromSubscriptionRef(parent), "detail")
+                    const detailLens = Lens.focusObjectOnWritable(Lens.fromSubscriptionRef(parent), "detail")
                     return Effect.flatMap(
                         Lens.set(detailLens, "mutated"),
                         () => parent.get,

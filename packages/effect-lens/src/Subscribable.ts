@@ -42,7 +42,7 @@ export const mapOptionEffect: {
 /**
  * Narrows the focus to a field of an object.
  */
-export const focusObjectField: {
+export const focusObjectOn: {
     <A extends object, K extends keyof A, E, R>(
         self: Subscribable.Subscribable<A, E, R>,
         key: K,

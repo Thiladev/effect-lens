@@ -26,7 +26,7 @@ extends Subscribable.Subscribable<A, ER, RR> {
  * Internal `Lens` implementation.
  */
 export class LensImpl<in out A, in out ER = never, in out EW = never, in out RR = never, in out RW = never>
-    extends Pipeable.Class() implements Lens<A, ER, EW, RR, RW> {
+extends Pipeable.Class() implements Lens<A, ER, EW, RR, RW> {
     readonly [Readable.TypeId]: Readable.TypeId = Readable.TypeId
     readonly [Subscribable.TypeId]: Subscribable.TypeId = Subscribable.TypeId
     readonly [LensTypeId]: LensTypeId = LensTypeId
@@ -273,7 +273,7 @@ export const mapStream: {
 /**
  * Narrows the focus to a field of an object. Replaces the object in an immutable fashion when written to.
  */
-export const focusObjectField: {
+export const focusObjectOn: {
     <A extends object, ER, EW, RR, RW, K extends keyof A>(
         self: Lens<A, ER, EW, RR, RW>,
         key: K,
@@ -290,7 +290,7 @@ export const focusObjectField: {
     (a, b) => Object.setPrototypeOf({ ...a, [key]: b }, Object.getPrototypeOf(a)),
 ))
 
-export declare namespace focusObjectMutableField {
+export declare namespace focusObjectOnWritable {
     export type WritableKeys<T> = {
         [K in keyof T]-?: IfEquals<
             { [P in K]: T[K] },
@@ -304,17 +304,17 @@ export declare namespace focusObjectMutableField {
 }
 
 /**
- * Narrows the focus to a mutable field of an object. Mutates the object in place when written to.
+ * Narrows the focus to a writable field of an object. Mutates the object in place when written to.
  */
-export const focusObjectMutableField: {
-    <A extends object, ER, EW, RR, RW, K extends focusObjectMutableField.WritableKeys<A>>(
+export const focusObjectOnWritable: {
+    <A extends object, ER, EW, RR, RW, K extends focusObjectOnWritable.WritableKeys<A>>(
         self: Lens<A, ER, EW, RR, RW>,
         key: K,
     ): Lens<A[K], ER, EW, RR, RW>
-    <A extends object, ER, EW, RR, RW, K extends focusObjectMutableField.WritableKeys<A>>(
+    <A extends object, ER, EW, RR, RW, K extends focusObjectOnWritable.WritableKeys<A>>(
         key: K,
     ): (self: Lens<A, ER, EW, RR, RW>) => Lens<A[K], ER, EW, RR, RW>
-} = Function.dual(2, <A extends object, ER, EW, RR, RW, K extends focusObjectMutableField.WritableKeys<A>>(
+} = Function.dual(2, <A extends object, ER, EW, RR, RW, K extends focusObjectOnWritable.WritableKeys<A>>(
     self: Lens<A, ER, EW, RR, RW>,
     key: K,
 ): Lens<A[K], ER, EW, RR, RW> => map(self, a => a[key], (a, b) => { a[key] = b; return a }))
