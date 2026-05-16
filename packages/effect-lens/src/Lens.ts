@@ -1,5 +1,4 @@
-import { Array, Chunk, Effect, Function, Option, Pipeable, Predicate, Readable, Stream, type SubscriptionRef, type SynchronizedRef } from "effect"
-import * as Cause from "effect/Cause"
+import { Array, Chunk, Effect, Function, identity, Option, Pipeable, Predicate, Readable, Stream, type SubscriptionRef, type SynchronizedRef } from "effect"
 import type { NoSuchElementException } from "effect/Cause"
 import * as Subscribable from "./Subscribable.js"
 
@@ -437,14 +436,8 @@ export const focusOption: {
     self: Lens<Option.Option<A>, ER, EW, RR, RW>,
 ): Lens<A, ER | NoSuchElementException, EW | NoSuchElementException, RR, RW> => mapEffect(
     self,
-    option => Option.match(option, {
-        onSome: value => Effect.succeed(value),
-        onNone: () => Effect.fail(new Cause.NoSuchElementException()),
-    }),
-    (option, value) => Option.match(option, {
-        onSome: () => Effect.succeed(Option.some(value)),
-        onNone: () => Effect.fail(new Cause.NoSuchElementException()),
-    }),
+    identity,
+    (a, b) => Effect.map(a, () => Option.some(b)),
 )
 
 
