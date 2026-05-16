@@ -1,4 +1,5 @@
 import { Array, Chunk, Effect, Function, Option, Pipeable, Predicate, Readable, Stream, type SubscriptionRef, type SynchronizedRef } from "effect"
+import * as Cause from "effect/Cause"
 import type { NoSuchElementException } from "effect/Cause"
 import * as Subscribable from "./Subscribable.js"
 
@@ -420,6 +421,30 @@ export const focusChunkAt: {
     self,
     Chunk.get(index),
     (a, b) => Effect.succeed(Chunk.replace(a, index, b))),
+)
+
+/**
+ * Narrows the focus to the value inside an `Option`.
+ *
+ * Reading or writing through this lens fails with `NoSuchElementException` when the parent option is `None`.
+ * Writing wraps the new focused value back into `Option.some`.
+ */
+export const focusOption: {
+    <A, ER, EW, RR, RW>(
+        self: Lens<Option.Option<A>, ER, EW, RR, RW>,
+    ): Lens<A, ER | NoSuchElementException, EW | NoSuchElementException, RR, RW>
+} = <A, ER, EW, RR, RW>(
+    self: Lens<Option.Option<A>, ER, EW, RR, RW>,
+): Lens<A, ER | NoSuchElementException, EW | NoSuchElementException, RR, RW> => mapEffect(
+    self,
+    option => Option.match(option, {
+        onSome: value => Effect.succeed(value),
+        onNone: () => Effect.fail(new Cause.NoSuchElementException()),
+    }),
+    (option, value) => Option.match(option, {
+        onSome: () => Effect.succeed(Option.some(value)),
+        onNone: () => Effect.fail(new Cause.NoSuchElementException()),
+    }),
 )
 
 

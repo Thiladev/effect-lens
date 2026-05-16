@@ -183,6 +183,47 @@ describe("Lens", () => {
         expect(Chunk.toReadonlyArray(updated)).toEqual([1, 2, 99])
     })
 
+    test("focusOption reads and writes the inner Some value", async () => {
+        const result = await Effect.runPromise(
+            Effect.flatMap(
+                SubscriptionRef.make<Option.Option<number>>(Option.some(42)),
+                parent => {
+                    const lens = Lens.focusOption(Lens.fromSubscriptionRef(parent))
+                    return Effect.flatMap(
+                        Lens.get(lens),
+                        value => Effect.flatMap(
+                            Lens.set(lens, 100),
+                            () => Effect.map(parent.get, parentValue => [value, parentValue] as const),
+                        ),
+                    )
+                },
+            ),
+        )
+
+        expect(result[0]).toBe(42)
+        expect(result[1]).toEqual(Option.some(100))
+    })
+
+    test("focusOption fails when the parent option is None", async () => {
+        const result = await Effect.runPromise(
+            Effect.flatMap(
+                SubscriptionRef.make<Option.Option<number>>(Option.none()),
+                parent => {
+                    const lens = Lens.focusOption(Lens.fromSubscriptionRef(parent))
+                    return Effect.all([
+                        Effect.either(Lens.get(lens)),
+                        Effect.either(Lens.set(lens, 100)),
+                        parent.get,
+                    ] as const)
+                },
+            ),
+        )
+
+        expect(result[0]._tag).toBe("Left")
+        expect(result[1]._tag).toBe("Left")
+        expect(result[2]).toEqual(Option.none())
+    })
+
     // test("changes stream emits updates when lens mutates state", async () => {
     //     const events = await Effect.runPromise(
     //         Effect.flatMap(
