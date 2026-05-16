@@ -95,6 +95,20 @@ const lens = Effect.all([
 
 Note: while Lens supports asynchronous effects for the proxy logic, we would recommend keeping them synchronous to preserve atomicity.
 
+If a `Lens` depends on a service in its environment, you can provide that service directly to the lens:
+```typescript
+class Offset extends Context.Tag("Offset")<Offset, { readonly value: number }>() {}
+
+const root = Lens.fromSubscriptionRef(ref)
+const offsetLens = Lens.mapEffect(
+    root,
+    n => Effect.map(Offset, ({ value }) => n + value),
+    (_n, next) => Effect.map(Offset, ({ value }) => next - value),
+)
+
+const runnableLens = Lens.provide(offsetLens, Offset, { value: 5 })
+```
+
 
 ### Focusing
 

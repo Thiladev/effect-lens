@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { Chunk, Effect, Option, SubscriptionRef } from "effect"
+import { Chunk, Context, Effect, Option, SubscriptionRef } from "effect"
 import * as Lens from "./Lens.js"
 
 
 describe("Lens", () => {
+    class Offset extends Context.Tag("Offset")<Offset, { readonly value: number }>() {}
+
     test("mapOption transforms Some values and preserves None", async () => {
         const result = await Effect.runPromise(
             Effect.flatMap(
@@ -52,6 +54,36 @@ describe("Lens", () => {
 
         expect(result[0]).toEqual(Option.some(84)) // 42 * 2
         expect(result[1]).toEqual(Option.some(50)) // 100 / 2
+    })
+
+    test("provide supplies a service to get and modify", async () => {
+        const result = await Effect.runPromise(
+            Effect.flatMap(
+                SubscriptionRef.make(10),
+                parent => {
+                    const lens = Lens.provide(
+                        Lens.mapEffect(
+                            Lens.fromSubscriptionRef(parent),
+                            n => Effect.map(Offset, ({ value }) => n + value),
+                            (_n, next) => Effect.map(Offset, ({ value }) => next - value),
+                        ),
+                        Offset,
+                        { value: 5 },
+                    )
+
+                    return Effect.flatMap(
+                        Lens.get(lens),
+                        value => Effect.flatMap(
+                            Lens.set(lens, 30),
+                            () => Effect.map(parent.get, parentValue => [value, parentValue] as const),
+                        ),
+                    )
+                },
+            ),
+        )
+
+        expect(result[0]).toBe(15)
+        expect(result[1]).toBe(25)
     })
 
     test("focusObjectOn focuses a nested property without touching other fields", async () => {

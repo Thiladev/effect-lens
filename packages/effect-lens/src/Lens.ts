@@ -1,4 +1,4 @@
-import { Array, Chunk, Effect, Function, identity, Option, Pipeable, Predicate, Readable, Stream, type SubscriptionRef, type SynchronizedRef } from "effect"
+import { Array, Chunk, type Context, Effect, Function, identity, Option, Pipeable, Predicate, Readable, Stream, type SubscriptionRef, type SynchronizedRef } from "effect"
 import type { NoSuchElementException } from "effect/Cause"
 import * as Subscribable from "./Subscribable.js"
 
@@ -267,6 +267,31 @@ export const mapStream: {
     get get() { return self.get },
     get changes() { return f(self.changes) },
     get modify() { return self.modify },
+}))
+
+/**
+ * Provides a single service to a `Lens`, removing it from both the read and write environments.
+ */
+export const provide: {
+    <A, ER, EW, RR, RW, I, S>(
+        self: Lens<A, ER, EW, RR, RW>,
+        tag: Context.Tag<I, S>,
+        service: NoInfer<S>,
+    ): Lens<A, ER, EW, Exclude<RR, I>, Exclude<RW, I>>
+    <I, S>(
+        tag: Context.Tag<I, S>,
+        service: NoInfer<S>,
+    ): <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>) => Lens<A, ER, EW, Exclude<RR, I>, Exclude<RW, I>>
+} = Function.dual(3, <A, ER, EW, RR, RW, I, S>(
+    self: Lens<A, ER, EW, RR, RW>,
+    tag: Context.Tag<I, S>,
+    service: NoInfer<S>,
+): Lens<A, ER, EW, Exclude<RR, I>, Exclude<RW, I>> => make({
+    get get() { return Effect.provideService(self.get, tag, service) },
+    get changes() { return Stream.provideService(self.changes, tag, service) },
+    modify: <B, E1 = never, R1 = never>(
+        f: (a: A) => Effect.Effect<readonly [B, A], E1, R1>
+    ) => Effect.provideService(self.modify(f), tag, service),
 }))
 
 
