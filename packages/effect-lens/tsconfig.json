@@ -6,7 +6,6 @@
     "module": "NodeNext",
     "moduleDetection": "force",
     "jsx": "react-jsx",
-    // "allowJs": true,
 
     // Bundler mode
     "moduleResolution": "NodeNext",
@@ -25,6 +24,7 @@
     "noPropertyAccessFromIndexSignature": false,
 
     // Build
+    "rootDir": "./src",
     "outDir": "./dist",
     "declaration": true,
     "sourceMap": true,

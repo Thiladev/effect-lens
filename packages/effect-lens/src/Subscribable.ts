@@ -1,4 +1,4 @@
-import { Array, Chunk, Effect, Function, Option, Subscribable } from "effect"
+import { Array, Chunk, Effect, Function, Iterable, Option, Subscribable } from "effect"
 import type { NoSuchElementException } from "effect/Cause"
 
 
@@ -72,6 +72,13 @@ export const focusArrayAt: {
 ): Subscribable.Subscribable<A[number], E | NoSuchElementException, R> => Subscribable.mapEffect(self, Array.get(index)))
 
 /**
+ * Narrows the focus to the length of an array.
+ */
+export const focusArrayLength = <A extends readonly any[], E, R>(
+    self: Subscribable.Subscribable<A, E, R>,
+): Subscribable.Subscribable<number, E, R> => Subscribable.map(self, Array.length)
+
+/**
  * Narrows the focus to an indexed element of a readonly tuple.
  */
 export const focusTupleAt: {
@@ -102,3 +109,17 @@ export const focusChunkAt: {
     self: Subscribable.Subscribable<Chunk.Chunk<A>, E, R>,
     index: number,
 ): Subscribable.Subscribable<A, E | NoSuchElementException, R> => Subscribable.mapEffect(self, Chunk.get(index)))
+
+/**
+ * Narrows the focus to the size of a `Chunk`.
+ */
+export const focusChunkSize = <A, E, R>(
+    self: Subscribable.Subscribable<Chunk.Chunk<A>, E, R>,
+): Subscribable.Subscribable<number, E, R> => Subscribable.map(self, Chunk.size)
+
+/**
+ * Narrows the focus to the size of a `Iterable`.
+ */
+export const focusIterableSize = <A, E, R>(
+    self: Subscribable.Subscribable<Iterable<A>, E, R>,
+): Subscribable.Subscribable<number, E, R> => Subscribable.map(self, Iterable.size)

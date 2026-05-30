@@ -1,10 +1,112 @@
 import { describe, expect, test } from "bun:test"
-import { Chunk, Context, Effect, Option, SubscriptionRef } from "effect"
+import { Chunk, Context, Effect, Either, identity, Option, Stream, SubscriptionRef } from "effect"
 import * as Lens from "./Lens.js"
 
 
 describe("Lens", () => {
     class Offset extends Context.Tag("Offset")<Offset, { readonly value: number }>() {}
+
+    test("mapErrorRead transforms read errors", async () => {
+        const lens = Lens.mapErrorRead(
+            Lens.make<number, "read", never, never, never>({
+                get: Effect.fail("read" as const),
+                changes: Stream.fail("read" as const),
+                commit: () => Effect.void,
+                lock: Effect.succeed(identity),
+            }),
+            error => `mapped:${ error }`,
+        )
+
+        const result = await Effect.runPromise(Effect.either(Lens.get(lens)))
+
+        expect(result).toEqual(Either.left("mapped:read"))
+    })
+
+    test("mapErrorWrite transforms modify errors", async () => {
+        const lens = Lens.mapErrorWrite(
+            Lens.make<number, never, "write", never, never>({
+                get: Effect.succeed(1),
+                changes: Stream.make(1),
+                commit: () => Effect.fail("write" as const),
+                lock: Effect.succeed(identity),
+            }),
+            () => "mapped-write",
+        )
+
+        const result = await Effect.runPromise(Effect.either(Lens.set(lens, 2)))
+
+        expect(result).toEqual(Either.left("mapped-write"))
+    })
+
+    test("mapError transforms read and modify errors", async () => {
+        const lens = Lens.mapError(
+            Lens.make<number, "read", "write", never, never>({
+                get: Effect.fail("read" as const),
+                changes: Stream.fail("read" as const),
+                commit: () => Effect.fail("write" as const),
+                lock: Effect.succeed(identity),
+            }),
+            () => "mapped",
+        )
+
+        const result = await Effect.runPromise(Effect.all([
+            Effect.either(Lens.get(lens)),
+            Effect.either(Lens.set(lens, 1)),
+        ] as const))
+
+        expect(result[0]).toEqual(Either.left("mapped"))
+        expect(result[1]).toEqual(Either.left("mapped"))
+    })
+
+    test("tapErrorRead runs an effect on read failures", async () => {
+        const result = await Effect.runPromise(
+            Effect.flatMap(
+                SubscriptionRef.make(0),
+                counter => {
+                    const lens = Lens.tapErrorRead(
+                        Lens.make<number, "read", never, never, never>({
+                            get: Effect.fail("read" as const),
+                            changes: Stream.fail("read" as const),
+                            commit: () => Effect.void,
+                            lock: Effect.succeed(identity),
+                        }),
+                        () => SubscriptionRef.modify(counter, n => [void 0, n + 1] as const),
+                    )
+                    return Effect.flatMap(
+                        Effect.either(Lens.get(lens)),
+                        () => counter.get,
+                    )
+                },
+            ),
+        )
+
+        expect(result).toBe(1)
+    })
+
+    test("tapErrorWrite runs an effect on modify failures", async () => {
+        const result = await Effect.runPromise(
+            Effect.flatMap(
+                SubscriptionRef.make(0),
+                counter => {
+                    const lens = Lens.tapErrorWrite(
+                        Lens.make<number, never, "write", never, never>({
+                            get: Effect.succeed(1),
+                            changes: Stream.make(1),
+                            commit: () => Effect.fail("write" as const),
+                            lock: Effect.succeed(identity),
+                        }),
+                        () => SubscriptionRef.modify(counter, n => [void 0, n + 1] as const),
+                    )
+                    return Effect.flatMap(
+                        Effect.either(Lens.set(lens, 2)),
+                        () => counter.get,
+                    )
+                },
+            ),
+        )
+
+        expect(result).toBe(1)
+    })
 
     test("mapOption transforms Some values and preserves None", async () => {
         const result = await Effect.runPromise(
@@ -56,19 +158,18 @@ describe("Lens", () => {
         expect(result[1]).toEqual(Option.some(50)) // 100 / 2
     })
 
-    test("provide supplies a service to get and modify", async () => {
+    test("provideContext supplies a service to get and modify", async () => {
         const result = await Effect.runPromise(
             Effect.flatMap(
                 SubscriptionRef.make(10),
                 parent => {
-                    const lens = Lens.provide(
+                    const lens = Lens.provideContext(
                         Lens.mapEffect(
                             Lens.fromSubscriptionRef(parent),
                             n => Effect.map(Offset, ({ value }) => n + value),
                             (_n, next) => Effect.map(Offset, ({ value }) => next - value),
                         ),
-                        Offset,
-                        { value: 5 },
+                        Context.make(Offset, { value: 5 }),
                     )
 
                     return Effect.flatMap(
@@ -84,6 +185,56 @@ describe("Lens", () => {
 
         expect(result[0]).toBe(15)
         expect(result[1]).toBe(25)
+    })
+
+    test("modifyEffect updates are atomic under concurrency", async () => {
+        const iterations = 100
+
+        const result = await Effect.runPromise(Effect.flatMap(
+            SubscriptionRef.make({ count: 0 }),
+            parent => {
+                const countLens = Lens.focusObjectOn(Lens.fromSubscriptionRef(parent), "count")
+
+                return Effect.flatMap(
+                    Effect.forEach(
+                        Array.from({ length: iterations }),
+                        () => Lens.updateEffect(
+                            countLens,
+                            count => Effect.as(Effect.yieldNow(), count + 1),
+                        ),
+                        { concurrency: "unbounded", discard: true },
+                    ),
+                    () => parent.get,
+                )
+            },
+        ))
+
+        expect(result.count).toBe(iterations)
+    })
+
+    test("unwrap delegates reads, writes, and locking to the inner lens", async () => {
+        const iterations = 100
+
+        const result = await Effect.runPromise(Effect.flatMap(
+            SubscriptionRef.make(0),
+            parent => {
+                const lens = Lens.unwrap(Effect.succeed(Lens.fromSubscriptionRef(parent)))
+
+                return Effect.flatMap(
+                    Effect.forEach(
+                        Array.from({ length: iterations }),
+                        () => Lens.updateEffect(
+                            lens,
+                            count => Effect.as(Effect.yieldNow(), count + 1),
+                        ),
+                        { concurrency: "unbounded", discard: true },
+                    ),
+                    () => Effect.all([Lens.get(lens), parent.get] as const),
+                )
+            },
+        ))
+
+        expect(result).toEqual([iterations, iterations])
     })
 
     test("focusObjectOn focuses a nested property without touching other fields", async () => {

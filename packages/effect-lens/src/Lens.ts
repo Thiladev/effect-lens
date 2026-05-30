@@ -1,4 +1,4 @@
-import { Array, Chunk, type Context, Effect, Function, identity, Option, Pipeable, Predicate, Readable, Stream, type SubscriptionRef, type SynchronizedRef } from "effect"
+import { Array, Chunk, type Context, Effect, Function, identity, Option, Pipeable, Predicate, PubSub, Readable, Ref, Stream, type SubscriptionRef, type SynchronizedRef } from "effect"
 import type { NoSuchElementException } from "effect/Cause"
 import * as Subscribable from "./Subscribable.js"
 
@@ -17,31 +17,10 @@ export interface Lens<in out A, in out ER = never, in out EW = never, in out RR 
 extends Subscribable.Subscribable<A, ER, RR> {
     readonly [LensTypeId]: LensTypeId
 
-    readonly modify: <B, E1 = never, R1 = never>(
+    readonly modifyEffect: <B, E1 = never, R1 = never>(
         f: (a: A) => Effect.Effect<readonly [B, A], E1, R1>
     ) => Effect.Effect<B, ER | EW | E1, RR | RW | R1>
 }
-
-/**
- * Internal `Lens` implementation.
- */
-export class LensImpl<in out A, in out ER = never, in out EW = never, in out RR = never, in out RW = never>
-extends Pipeable.Class() implements Lens<A, ER, EW, RR, RW> {
-    readonly [Readable.TypeId]: Readable.TypeId = Readable.TypeId
-    readonly [Subscribable.TypeId]: Subscribable.TypeId = Subscribable.TypeId
-    readonly [LensTypeId]: LensTypeId = LensTypeId
-
-    constructor(
-        readonly get: Effect.Effect<A, ER, RR>,
-        readonly changes: Stream.Stream<A, ER, RR>,
-        readonly modify: <B, E1 = never, R1 = never>(
-            f: (a: A) => Effect.Effect<readonly [B, A], E1, R1>
-        ) => Effect.Effect<B, ER | EW | E1, RR | RW | R1>,
-    ) {
-        super()
-    }
-}
-
 
 /**
  * Checks whether a value is a `Lens`.
@@ -49,48 +28,198 @@ extends Pipeable.Class() implements Lens<A, ER, EW, RR, RW> {
 export const isLens = (u: unknown): u is Lens<unknown, unknown, unknown, unknown, unknown> => Predicate.hasProperty(u, LensTypeId)
 
 
-/**
- * Creates a `Lens` by supplying how to read the current value, observe changes, and apply transformations.
- *
- * Either `modify` or `set` needs to be supplied.
- */
-export const make = <A, ER, EW, RR, RW>(
-    options: {
+export const LensImplTypeId: unique symbol = Symbol.for("@effect-fc/Lens/LensImpl")
+export type LensImplTypeId = typeof LensImplTypeId
+
+export declare namespace LensImpl {
+    export interface Resolved<in out A, in out EW = never, in out RW = never> {
+        readonly value: A
+        readonly commit: <E = never, R = never>(
+            next: Effect.Effect<A, E, R>
+        ) => Effect.Effect<void, EW | E, RW | R>
+    }
+
+    export interface Lock {
+        <A1, E1, R1>(self: Effect.Effect<A1, E1, R1>): Effect.Effect<A1, E1, R1>
+    }
+}
+
+export abstract class LensImpl<in out A, in out ER = never, in out EW = never, in out RR = never, in out RW = never>
+extends Pipeable.Class() implements Lens<A, ER, EW, RR, RW> {
+    readonly [Readable.TypeId]: Readable.TypeId = Readable.TypeId
+    readonly [Subscribable.TypeId]: Subscribable.TypeId = Subscribable.TypeId
+    readonly [LensTypeId]: LensTypeId = LensTypeId
+    readonly [LensImplTypeId]: LensImplTypeId = LensImplTypeId
+
+    abstract readonly resolve: Effect.Effect<LensImpl.Resolved<A, EW, RW>, ER, RR>
+    abstract readonly changes: Stream.Stream<A, ER, RR>
+    abstract readonly lock: Effect.Effect<LensImpl.Lock, EW, RW>
+
+    get get() { return Effect.map(this.resolve, resolved => resolved.value) }
+
+    modifyEffect<B, E1 = never, R1 = never>(
+        f: (a: A) => Effect.Effect<readonly [B, A], E1, R1>,
+    ): Effect.Effect<B, ER | EW | E1, RR | RW | R1> {
+        return Effect.flatMap(
+            this.lock,
+            lock => lock(Effect.flatMap(
+                this.resolve,
+                resolved => Effect.flatMap(
+                    f(resolved.value),
+                    ([c, next]) => Effect.as(resolved.commit(Effect.succeed(next)), c),
+                ),
+            )),
+        )
+    }
+}
+
+export const isLensImpl = (u: unknown): u is LensImpl<unknown, unknown, unknown, unknown, unknown> => Predicate.hasProperty(u, LensImplTypeId)
+
+export const asLensImpl = <A, ER, EW, RR, RW>(
+    lens: Lens<A, ER, EW, RR, RW>
+): LensImpl<A, ER, EW, RR, RW> => {
+    if (!isLensImpl(lens))
+        throw new Error("Not a 'LensImpl'")
+    return lens as LensImpl<A, ER, EW, RR, RW>
+}
+
+
+export declare namespace LensLazyImpl {
+    export interface Source<in out A, in out ER = never, in out EW = never, in out RR = never, in out RW = never> {
         readonly get: Effect.Effect<A, ER, RR>
         readonly changes: Stream.Stream<A, ER, RR>
-    } & (
-        | {
-            readonly modify: <B, E1 = never, R1 = never>(
-                f: (a: A) => Effect.Effect<readonly [B, A], E1, R1>
-            ) => Effect.Effect<B, ER | EW | E1, RR | RW | R1>
-        }
-        | { readonly set: (a: A) => Effect.Effect<void, EW, RW> }
-    )
-): Lens<A, ER, EW, RR, RW> => new LensImpl<A, ER, EW, RR, RW>(
-    options.get,
-    options.changes,
-    Predicate.hasProperty(options, "modify")
-        ? options.modify
-        : <B, E1 = never, R1 = never>(
-            f: (a: A) => Effect.Effect<readonly [B, A], E1, R1>
-        ) => Effect.flatMap(
-            options.get,
-            a => Effect.flatMap(f(a), ([b, next]) => Effect.as(options.set(next), b)
-        )),
-)
+        readonly commit: (a: A) => Effect.Effect<void, EW, RW>
+        readonly lock: Effect.Effect<LensImpl.Lock, EW, RW>
+    }
+}
+
+export class LensLazyImpl<in out A, in out ER = never, in out EW = never, in out RR = never, in out RW = never>
+extends LensImpl<A, ER, EW, RR, RW> {
+    constructor(
+        readonly source: LensLazyImpl.Source<A, ER, EW, RR, RW>,
+    ) {
+        super()
+    }
+
+    get resolve(): Effect.Effect<LensImpl.Resolved<A, EW, RW>, ER, RR> {
+        return Effect.map(
+            this.source.get,
+            value => ({
+                value,
+                commit: next => Effect.flatMap(next, value => this.source.commit(value)),
+            }),
+        )
+    }
+    get changes() { return this.source.changes }
+    get lock() { return this.source.lock }
+}
 
 /**
- * Creates a `Lens` that proxies a `SubscriptionRef`.
+ * Creates a `Lens` by supplying how to read the current value, observe changes, and apply transformations.
  */
-export const fromSubscriptionRef = <A>(
-    ref: SubscriptionRef.SubscriptionRef<A>
-): Lens<A, never, never, never, never> => make({
-    get get() { return ref.get },
-    get changes() { return ref.changes },
-    modify: <B, E1 = never, R1 = never>(
-        f: (a: A) => Effect.Effect<readonly [B, A], E1, R1>
-    ) => ref.modifyEffect(f),
+export const make = <A, ER, EW, RR, RW>(
+    source: LensLazyImpl.Source<A, ER, EW, RR, RW>
+): Lens<A, ER, EW, RR, RW> => new LensLazyImpl(source)
+
+
+export class UnwrappedLensImpl<in out A, in out ER, in out EW, in out RR, in out RW, in out E1, in out R1>
+extends LensImpl<A, ER | E1, EW | E1, RR | R1, RW | R1> {
+    constructor(
+        readonly effect: Effect.Effect<Lens<A, ER, EW, RR, RW>, E1, R1>
+    ) {
+        super()
+    }
+
+    get resolve(): Effect.Effect<LensImpl.Resolved<A, EW | E1, RW | R1>, ER | E1, RR | R1> {
+        return Effect.map(
+            Effect.flatMap(this.effect, l => asLensImpl(l).resolve),
+            resolved => ({
+                value: resolved.value,
+                commit: next => resolved.commit(next),
+            }),
+        )
+    }
+    get changes() { return Stream.unwrap(Effect.map(this.effect, l => l.changes)) }
+    get lock() { return Effect.flatMap(this.effect, l => asLensImpl(l).lock) }
+}
+
+/**
+ * Flattens an effectful `Lens`.
+ */
+export const unwrap = <A, ER, EW, RR, RW, E1, R1>(
+    effect: Effect.Effect<Lens<A, ER, EW, RR, RW>, E1, R1>
+): Lens<A, ER | E1, EW | E1, RR | R1, RW | R1> => new UnwrappedLensImpl(effect)
+
+
+export class RefLensImpl<in out A>
+extends LensImpl<A, never, never, never, never> {
+    constructor(
+        readonly ref: Ref.Ref<A>,
+        readonly semaphore: Effect.Semaphore,
+    ) {
+        super()
+    }
+
+    get resolve(): Effect.Effect<LensImpl.Resolved<A>, never, never> {
+        return Effect.map(
+            Ref.get(this.ref),
+            value => ({
+                value,
+                commit: next => Effect.flatMap(
+                    next,
+                    value => Ref.set(this.ref, value),
+                ),
+            }),
+        )
+    }
+    get changes() { return Stream.unwrap(Effect.map(Ref.get(this.ref), Stream.make)) }
+    get lock() { return Effect.succeed(this.semaphore.withPermits(1)) }
+}
+
+/**
+ * Creates a `Lens` that proxies a `Ref`.
+ *
+ * Note: since `Ref` does not provide any kind of reactivity mechanism, the produced `Lens` will be non-reactive.
+ * This means its `changes` stream will only emit the current value once when evaluated and nothing else.
+ */
+export const fromRef = Effect.fnUntraced(function* <A>(
+    ref: Ref.Ref<A>
+): Effect.fn.Return<Lens<A, never, never, never, never>, never, never> {
+    return new RefLensImpl(ref, yield* Effect.makeSemaphore(1))
 })
+
+
+export declare namespace SynchronizedRefLensImpl {
+    export interface SynchronizedRefWithInternals<in out A>
+    extends SynchronizedRef.SynchronizedRef<A> {
+        readonly ref: Ref.Ref<A>
+        readonly withLock: LensImpl.Lock
+    }
+}
+
+export class SynchronizedRefLensImpl<in out A>
+extends LensImpl<A, never, never, never, never> {
+    constructor(
+        readonly ref: SynchronizedRefLensImpl.SynchronizedRefWithInternals<A>
+    ) {
+        super()
+    }
+
+    get resolve(): Effect.Effect<LensImpl.Resolved<A>, never, never> {
+        return Effect.map(
+            Ref.get(this.ref.ref),
+            value => ({
+                value,
+                commit: next => Effect.flatMap(
+                    next,
+                    value => Ref.set(this.ref.ref, value),
+                ),
+            }),
+        )
+    }
+    get changes() { return Stream.unwrap(Effect.map(Ref.get(this.ref.ref), Stream.make)) }
+    get lock() { return Effect.succeed(this.ref.withLock) }
+}
 
 /**
  * Creates a `Lens` that proxies a `SynchronizedRef`.
@@ -100,26 +229,112 @@ export const fromSubscriptionRef = <A>(
  */
 export const fromSynchronizedRef = <A>(
     ref: SynchronizedRef.SynchronizedRef<A>
-): Lens<A, never, never, never, never> => make({
-    get get() { return ref.get },
-    get changes() { return Stream.unwrap(Effect.map(ref.get, Stream.make)) },
-    modify: <B, E1 = never, R1 = never>(
-        f: (a: A) => Effect.Effect<readonly [B, A], E1, R1>
-    ) => ref.modifyEffect(f),
-})
+): Lens<A, never, never, never, never> => new SynchronizedRefLensImpl(ref as SynchronizedRefLensImpl.SynchronizedRefWithInternals<A>)
+
+
+export declare namespace SubscriptionRefLensImpl {
+    export interface SubscriptionRefWithInternals<in out A>
+    extends SubscriptionRef.SubscriptionRef<A> {
+        readonly ref: Ref.Ref<A>
+        readonly pubsub: PubSub.PubSub<A>
+        readonly semaphore: Effect.Semaphore
+    }
+}
+
+export class SubscriptionRefLensImpl<in out A>
+extends LensImpl<A, never, never, never, never> {
+    constructor(
+        readonly ref: SubscriptionRefLensImpl.SubscriptionRefWithInternals<A>
+    ) {
+        super()
+    }
+
+    get resolve(): Effect.Effect<LensImpl.Resolved<A>, never, never> {
+        return Effect.map(
+            this.ref.get,
+            value => ({
+                value,
+                commit: next => Effect.flatMap(
+                    next,
+                    value => Effect.zipLeft(
+                        Ref.set(this.ref.ref, value),
+                        PubSub.publish(this.ref.pubsub, value),
+                    ),
+                ),
+            }),
+        )
+    }
+    get changes() { return this.ref.changes }
+    get lock() { return Effect.succeed(this.ref.semaphore.withPermits(1)) }
+}
 
 /**
- * Flattens an effectful `Lens`.
+ * Creates a `Lens` that proxies a `SubscriptionRef`.
  */
-export const unwrap = <A, ER, EW, RR, RW, E1, R1>(
-    effect: Effect.Effect<Lens<A, ER, EW, RR, RW>, E1, R1>
-): Lens<A, ER | E1, EW | E1, RR | R1, RW | R1> => make({
-    get: Effect.flatMap(effect, l => l.get),
-    changes: Stream.unwrap(Effect.map(effect, l => l.changes)),
-    modify: <B, E2 = never, R2 = never>(
-        f: (a: A) => Effect.Effect<readonly [B, A], E2, R2>
-    ) => Effect.flatMap(effect, l => l.modify(f)),
-})
+export const fromSubscriptionRef = <A>(
+    ref: SubscriptionRef.SubscriptionRef<A>
+): Lens<A, never, never, never, never> => new SubscriptionRefLensImpl(ref as SubscriptionRefLensImpl.SubscriptionRefWithInternals<A>)
+
+
+export declare namespace DerivedLensImpl {
+    export interface Source<
+        in out A,
+        in out B,
+        in out ER = never,
+        in out ESR = never,
+        in out EW = never,
+        in out ESW = never,
+        in out RR = never,
+        in out RSR = never,
+        in out RW = never,
+        in out RSW = never,
+    > {
+        readonly resolve: (effect: Effect.Effect<LensImpl.Resolved<B, ESW, RSW>, ESR, RSR>) => Effect.Effect<LensImpl.Resolved<A, EW, RW>, ER, RR>
+        readonly mapStream: (stream: Stream.Stream<B, ESR, RSR>) => Stream.Stream<A, ER, RR>
+        readonly mapLock: (lock: Effect.Effect<LensImpl.Lock, ESW, RSW>) => Effect.Effect<LensImpl.Lock, EW, RW>
+    }
+}
+
+export class DerivedLensImpl<
+    in out A,
+    in out B,
+    in out ER = never,
+    in out PER = never,
+    in out EW = never,
+    in out PEW = never,
+    in out RR = never,
+    in out PRR = never,
+    in out RW = never,
+    in out PRW = never,
+>
+extends LensImpl<A, ER, EW, RR, RW> {
+    constructor(
+        readonly parent: LensImpl<B, PER, PEW, PRR, PRW>,
+        readonly source: DerivedLensImpl.Source<A, B, ER, PER, EW, PEW, RR, PRR, RW, PRW>,
+    ) {
+        super()
+    }
+
+    get resolve() { return this.source.resolve(this.parent.resolve) }
+    get changes() { return this.source.mapStream(this.parent.changes) }
+    get lock() { return this.source.mapLock(this.parent.lock) }
+}
+
+/**
+ * Derives a new `Lens` by linking a step to an existing parent lens.
+ */
+export const derive: {
+    <A, B, ER, EW, RR, RW, ER2, EW2, RR2, RW2>(
+        self: Lens<B, ER, EW, RR, RW>,
+        source: DerivedLensImpl.Source<A, B, ER2, ER, EW2, EW, RR2, RR, RW2, RW>,
+    ): Lens<A, ER2, EW2, RR2, RW2>
+    <A, B, ER, EW, RR, RW, ER2, EW2, RR2, RW2>(
+        source: DerivedLensImpl.Source<A, B, ER2, ER, EW2, EW, RR2, RR, RW2, RW>,
+    ): (self: Lens<B, ER, EW, RR, RW>) => Lens<A, ER2, EW2, RR2, RW2>
+} = Function.dual(2, <A, B, ER, EW, RR, RW, ER2, EW2, RR2, RW2>(
+    self: Lens<B, ER, EW, RR, RW>,
+    source: DerivedLensImpl.Source<A, B, ER2, ER, EW2, EW, RR2, RR, RW2, RW>,
+): Lens<A, ER2, EW2, RR2, RW2> => new DerivedLensImpl(asLensImpl(self), source))
 
 
 /**
@@ -139,14 +354,16 @@ export const map: {
     self: Lens<A, ER, EW, RR, RW>,
     get: (a: NoInfer<A>) => B,
     set: (a: NoInfer<A>, b: B) => NoInfer<A>,
-): Lens<B, ER, EW, RR, RW> => make({
-    get get() { return Effect.map(self.get, get) },
-    get changes() { return Stream.map(self.changes, get) },
-    modify: <C, E1 = never, R1 = never>(
-        f: (b: B) => Effect.Effect<readonly [C, B], E1, R1>
-    ) => self.modify(a =>
-        Effect.flatMap(f(get(a)), ([c, next]) => Effect.succeed([c, set(a, next)]))
+): Lens<B, ER, EW, RR, RW> => derive(self, {
+    resolve: parent => Effect.map(
+        parent,
+        resolved => ({
+            value: get(resolved.value),
+            commit: next => resolved.commit(Effect.map(next, b => set(resolved.value, b))),
+        }),
     ),
+    mapStream: Stream.map(get),
+    mapLock: identity,
 }))
 
 /**
@@ -166,21 +383,19 @@ export const mapEffect: {
     self: Lens<A, ER, EW, RR, RW>,
     get: (a: NoInfer<A>) => Effect.Effect<B, EGet, RGet>,
     set: (a: NoInfer<A>, b: B) => Effect.Effect<NoInfer<A>, ESet, RSet>,
-): Lens<B, ER | EGet, EW | ESet, RR | RGet, RW | RSet> => make({
-    get get() { return Effect.flatMap(self.get, get) },
-    get changes() { return Stream.mapEffect(self.changes, get) },
-    modify: <C, E1 = never, R1 = never>(
-        f: (b: B) => Effect.Effect<readonly [C, B], E1, R1>
-    ) => self.modify(a => Effect.flatMap(
-        get(a),
-        b => Effect.flatMap(
-            f(b),
-            ([c, bNext]) => Effect.flatMap(
-                set(a, bNext),
-                nextA => Effect.succeed([c, nextA] as const),
-            ),
-        )
-    )),
+): Lens<B, ER | EGet, EW | ESet, RR | RGet, RW | RSet> => derive(self, {
+    resolve: parent => Effect.flatMap(
+        parent,
+        resolved => Effect.map(
+            get(resolved.value),
+            value => ({
+                value,
+                commit: next => resolved.commit(Effect.flatMap(next, b => set(resolved.value, b))),
+            }),
+        ),
+    ),
+    mapStream: Stream.mapEffect(get),
+    mapLock: identity<Effect.Effect<LensImpl.Lock, EW | ESet, RW | RSet>>,
 }))
 
 /**
@@ -263,16 +478,213 @@ export const mapStream: {
 } = Function.dual(2, <A, ER, EW, RR, RW>(
     self: Lens<A, ER, EW, RR, RW>,
     f: (changes: Stream.Stream<NoInfer<A>, NoInfer<ER>, NoInfer<RR>>) => Stream.Stream<NoInfer<A>, NoInfer<ER>, NoInfer<RR>>,
-): Lens<A, ER, EW, RR, RW> => make({
-    get get() { return self.get },
-    get changes() { return f(self.changes) },
-    get modify() { return self.modify },
+): Lens<A, ER, EW, RR, RW> => derive(self, {
+    resolve: identity,
+    mapStream: f,
+    mapLock: identity,
+}))
+
+
+/**
+ * Transforms read errors of a `Lens`.
+ *
+ * Applies to `get` and `changes` while leaving `modify` unchanged.
+ */
+export const mapErrorRead: {
+    <A, ER, EW, RR, RW, E2>(
+        self: Lens<A, ER, EW, RR, RW>,
+        f: (error: NoInfer<ER>) => E2,
+    ): Lens<A, E2, EW, RR, RW>
+    <A, ER, EW, RR, RW, E2>(
+        f: (error: NoInfer<ER>) => E2,
+    ): (self: Lens<A, ER, EW, RR, RW>) => Lens<A, E2, EW, RR, RW>
+} = Function.dual(2, <A, ER, EW, RR, RW, E2>(
+    self: Lens<A, ER, EW, RR, RW>,
+    f: (error: NoInfer<ER>) => E2,
+): Lens<A, E2, EW, RR, RW> => derive(self, {
+    resolve: Effect.mapError(f),
+    mapStream: Stream.mapError(f),
+    mapLock: identity,
+}))
+
+/**
+ * Transforms modify errors of a `Lens`.
+ *
+ * Applies to the commit/rebuild portion of `modifyEffect` while leaving failures from the
+ * user-supplied callback unchanged.
+ */
+export const mapErrorWrite: {
+    <A, ER, EW, RR, RW, E2>(
+        self: Lens<A, ER, EW, RR, RW>,
+        f: (error: NoInfer<EW>) => E2,
+    ): Lens<A, ER, E2, RR, RW>
+    <A, ER, EW, RR, RW, E2>(
+        f: (error: NoInfer<EW>) => E2,
+    ): (self: Lens<A, ER, EW, RR, RW>) => Lens<A, ER, E2, RR, RW>
+} = Function.dual(2, <A, ER, EW, RR, RW, E2>(
+    self: Lens<A, ER, EW, RR, RW>,
+    f: (error: NoInfer<EW>) => E2,
+): Lens<A, ER, E2, RR, RW> => derive(self, {
+    resolve: parent => Effect.map(parent, resolved => ({
+        value: resolved.value,
+        commit: next => Effect.flatMap(
+            next,
+            value => Effect.mapError(resolved.commit(Effect.succeed(value)), f),
+        ),
+    })),
+    mapStream: identity,
+    mapLock: Effect.mapError(f),
+}))
+
+/**
+ * Transforms all errors of a `Lens`.
+ *
+ * Applies to `get`, `changes`, and the commit/rebuild portion of `modifyEffect` while leaving
+ * failures from the user-supplied callback unchanged.
+ */
+export const mapError: {
+    <A, ER, EW, RR, RW, E2>(
+        self: Lens<A, ER, EW, RR, RW>,
+        f: (error: NoInfer<ER | EW>) => E2,
+    ): Lens<A, E2, E2, RR, RW>
+    <A, ER, EW, RR, RW, E2>(
+        f: (error: NoInfer<ER | EW>) => E2,
+    ): (self: Lens<A, ER, EW, RR, RW>) => Lens<A, E2, E2, RR, RW>
+} = Function.dual(2, <A, ER, EW, RR, RW, E2>(
+    self: Lens<A, ER, EW, RR, RW>,
+    f: (error: NoInfer<ER | EW>) => E2,
+): Lens<A, E2, E2, RR, RW> => derive(self, {
+    resolve: parent => Effect.map(
+        Effect.mapError(parent, f),
+        resolved => ({
+            value: resolved.value,
+            commit: next => Effect.flatMap(
+                next,
+                value => Effect.mapError(resolved.commit(Effect.succeed(value)), f),
+            ),
+        }),
+    ),
+    mapStream: Stream.mapError(f),
+    mapLock: Effect.mapError(f),
+}))
+
+/**
+ * Runs an effect when read failures occur.
+ *
+ * Applies to `get` and `changes` while leaving `modify` unchanged.
+ */
+export const tapErrorRead: {
+    <A, ER, EW, RR, RW, E2, R2>(
+        self: Lens<A, ER, EW, RR, RW>,
+        f: (error: NoInfer<ER>) => Effect.Effect<unknown, E2, R2>,
+    ): Lens<A, ER | E2, EW, RR | R2, RW>
+    <A, ER, EW, RR, RW, E2, R2>(
+        f: (error: NoInfer<ER>) => Effect.Effect<unknown, E2, R2>,
+    ): (self: Lens<A, ER, EW, RR, RW>) => Lens<A, ER | E2, EW, RR | R2, RW>
+} = Function.dual(2, <A, ER, EW, RR, RW, E2, R2>(
+    self: Lens<A, ER, EW, RR, RW>,
+    f: (error: NoInfer<ER>) => Effect.Effect<unknown, E2, R2>,
+): Lens<A, ER | E2, EW, RR | R2, RW> => derive(self, {
+    resolve: Effect.tapError(f),
+    mapStream: Stream.tapError(f),
+    mapLock: identity,
+}))
+
+/**
+ * Runs an effect when modify failures occur.
+ *
+ * Applies to the commit/rebuild portion of `modifyEffect` while leaving failures from the
+ * user-supplied callback unchanged.
+ */
+export const tapErrorWrite: {
+    <A, ER, EW, RR, RW, E2, R2>(
+        self: Lens<A, ER, EW, RR, RW>,
+        f: (error: NoInfer<EW>) => Effect.Effect<unknown, E2, R2>,
+    ): Lens<A, ER, EW | E2, RR, RW | R2>
+    <A, ER, EW, RR, RW, E2, R2>(
+        f: (error: NoInfer<EW>) => Effect.Effect<unknown, E2, R2>,
+    ): (self: Lens<A, ER, EW, RR, RW>) => Lens<A, ER, EW | E2, RR, RW | R2>
+} = Function.dual(2, <A, ER, EW, RR, RW, E2, R2>(
+    self: Lens<A, ER, EW, RR, RW>,
+    f: (error: NoInfer<EW>) => Effect.Effect<unknown, E2, R2>,
+): Lens<A, ER, EW | E2, RR, RW | R2> => derive(self, {
+    resolve: parent => Effect.map(parent, resolved => ({
+        value: resolved.value,
+        commit: next => Effect.flatMap(
+            next,
+            value => Effect.tapError(resolved.commit(Effect.succeed(value)), f),
+        ),
+    })),
+    mapStream: identity,
+    mapLock: Effect.tapError(f),
+}))
+
+/**
+ * Runs an effect when any `Lens` failure occurs.
+ *
+ * Applies to `get`, `changes`, and the commit/rebuild portion of `modifyEffect` while leaving
+ * failures from the user-supplied callback unchanged.
+ */
+export const tapError: {
+    <A, ER, EW, RR, RW, E2, R2>(
+        self: Lens<A, ER, EW, RR, RW>,
+        f: (error: NoInfer<ER | EW>) => Effect.Effect<unknown, E2, R2>,
+    ): Lens<A, ER | E2, EW | E2, RR | R2, RW | R2>
+    <A, ER, EW, RR, RW, E2, R2>(
+        f: (error: NoInfer<ER | EW>) => Effect.Effect<unknown, E2, R2>,
+    ): (self: Lens<A, ER, EW, RR, RW>) => Lens<A, ER | E2, EW | E2, RR | R2, RW | R2>
+} = Function.dual(2, <A, ER, EW, RR, RW, E2, R2>(
+    self: Lens<A, ER, EW, RR, RW>,
+    f: (error: NoInfer<ER | EW>) => Effect.Effect<unknown, E2, R2>,
+): Lens<A, ER | E2, EW | E2, RR | R2, RW | R2> => derive(self, {
+    resolve: parent => Effect.map(
+        Effect.tapError(parent, f),
+        resolved => ({
+            value: resolved.value,
+            commit: next => Effect.flatMap(
+                next,
+                value => Effect.tapError(resolved.commit(Effect.succeed(value)), f),
+            ),
+        }),
+    ),
+    mapStream: Stream.tapError(f),
+    mapLock: Effect.tapError(f),
+}))
+
+
+/**
+ * Provides a `Context` to a `Lens`, removing it from both the read and write environments.
+ */
+export const provideContext: {
+    <A, ER, EW, RR, RW, R2>(
+        self: Lens<A, ER, EW, RR, RW>,
+        context: Context.Context<R2>,
+    ): Lens<A, ER, EW, Exclude<RR, R2>, Exclude<RW, R2>>
+    <R2>(
+        context: Context.Context<R2>,
+    ): <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>) => Lens<A, ER, EW, Exclude<RR, R2>, Exclude<RW, R2>>
+} = Function.dual(2, <A, ER, EW, RR, RW, R2>(
+    self: Lens<A, ER, EW, RR, RW>,
+    context: Context.Context<R2>,
+): Lens<A, ER, EW, Exclude<RR, R2>, Exclude<RW, R2>> => derive(self, {
+    resolve: parent => Effect.map(
+        Effect.provide(parent, context),
+        resolved => ({
+            value: resolved.value,
+            commit: next => Effect.provide(resolved.commit(next), context),
+        }),
+    ),
+    mapStream: Stream.provideSomeContext(context),
+    mapLock: Effect.provide(context),
 }))
 
 /**
  * Provides a single service to a `Lens`, removing it from both the read and write environments.
+ *
+ * This is the `Lens` equivalent of `Effect.provideService`: use it when a lens requires one
+ * `Context.Tag` and you already have the concrete service value.
  */
-export const provide: {
+export const provideService: {
     <A, ER, EW, RR, RW, I, S>(
         self: Lens<A, ER, EW, RR, RW>,
         tag: Context.Tag<I, S>,
@@ -286,12 +698,16 @@ export const provide: {
     self: Lens<A, ER, EW, RR, RW>,
     tag: Context.Tag<I, S>,
     service: NoInfer<S>,
-): Lens<A, ER, EW, Exclude<RR, I>, Exclude<RW, I>> => make({
-    get get() { return Effect.provideService(self.get, tag, service) },
-    get changes() { return Stream.provideService(self.changes, tag, service) },
-    modify: <B, E1 = never, R1 = never>(
-        f: (a: A) => Effect.Effect<readonly [B, A], E1, R1>
-    ) => Effect.provideService(self.modify(f), tag, service),
+): Lens<A, ER, EW, Exclude<RR, I>, Exclude<RW, I>> => derive(self, {
+    resolve: parent => Effect.map(
+        Effect.provideService(parent, tag, service),
+        resolved => ({
+            value: resolved.value,
+            commit: next => Effect.provideService(resolved.commit(next), tag, service),
+        }),
+    ),
+    mapStream: Stream.provideService(tag, service),
+    mapLock: Effect.provideService(tag, service),
 }))
 
 
@@ -478,7 +894,7 @@ export const set: {
     <A, ER, EW, RR, RW>(value: A): (self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<void, ER | EW, RR | RW>
     <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, value: A): Effect.Effect<void, ER | EW, RR | RW>
 } = Function.dual(2, <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, value: A) =>
-    self.modify<void, never, never>(() => Effect.succeed([void 0, value] as const)),
+    self.modifyEffect<void, never, never>(() => Effect.succeed([void 0, value] as const)),
 )
 
 /**
@@ -488,7 +904,7 @@ export const getAndSet: {
     <A, ER, EW, RR, RW>(value: A): (self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<A, ER | EW, RR | RW>
     <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, value: A): Effect.Effect<A, ER | EW, RR | RW>
 } = Function.dual(2, <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, value: A) =>
-    self.modify<A, never, never>(a => Effect.succeed([a, value] as const)),
+    self.modifyEffect<A, never, never>(a => Effect.succeed([a, value] as const)),
 )
 
 /**
@@ -498,7 +914,7 @@ export const update: {
     <A, ER, EW, RR, RW>(f: (a: A) => A): (self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<void, ER | EW, RR | RW>
     <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => A): Effect.Effect<void, ER | EW, RR | RW>
 } = Function.dual(2, <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => A) =>
-    self.modify<void, never, never>(a => Effect.succeed([void 0, f(a)] as const)),
+    self.modifyEffect<void, never, never>(a => Effect.succeed([void 0, f(a)] as const)),
 )
 
 /**
@@ -508,7 +924,7 @@ export const updateEffect: {
     <A, ER, EW, RR, RW, E, R>(f: (a: A) => Effect.Effect<A, E, R>): (self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<void, ER | EW | E, RR | RW | R>
     <A, ER, EW, RR, RW, E, R>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => Effect.Effect<A, E, R>): Effect.Effect<void, ER | EW | E, RR | RW | R>
 } = Function.dual(2, <A, ER, EW, RR, RW, E, R>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => Effect.Effect<A, E, R>) =>
-    self.modify<void, E, R>(a => Effect.flatMap(
+    self.modifyEffect<void, E, R>(a => Effect.flatMap(
         f(a),
         next => Effect.succeed([void 0, next] as const),
     )),
@@ -521,7 +937,7 @@ export const getAndUpdate: {
     <A, ER, EW, RR, RW>(f: (a: A) => A): (self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<A, ER | EW, RR | RW>
     <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => A): Effect.Effect<A, ER | EW, RR | RW>
 } = Function.dual(2, <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => A) =>
-    self.modify<A, never, never>(a => Effect.succeed([a, f(a)] as const)),
+    self.modifyEffect<A, never, never>(a => Effect.succeed([a, f(a)] as const)),
 )
 
 /**
@@ -531,7 +947,7 @@ export const getAndUpdateEffect: {
     <A, ER, EW, RR, RW, E, R>(f: (a: A) => Effect.Effect<A, E, R>): (self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<A, ER | EW | E, RR | RW | R>
     <A, ER, EW, RR, RW, E, R>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => Effect.Effect<A, E, R>): Effect.Effect<A, ER | EW | E, RR | RW | R>
 } = Function.dual(2, <A, ER, EW, RR, RW, E, R>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => Effect.Effect<A, E, R>) =>
-    self.modify<A, E, R>(a => Effect.flatMap(
+    self.modifyEffect<A, E, R>(a => Effect.flatMap(
         f(a),
         next => Effect.succeed([a, next] as const)
     )),
@@ -544,7 +960,7 @@ export const setAndGet: {
     <A, ER, EW, RR, RW>(value: A): (self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<A, ER | EW, RR | RW>
     <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, value: A): Effect.Effect<A, ER | EW, RR | RW>
 } = Function.dual(2, <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, value: A) =>
-    self.modify<A, never, never>(() => Effect.succeed([value, value] as const)),
+    self.modifyEffect<A, never, never>(() => Effect.succeed([value, value] as const)),
 )
 
 /**
@@ -554,7 +970,7 @@ export const updateAndGet: {
     <A, ER, EW, RR, RW>(f: (a: A) => A): (self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<A, ER | EW, RR | RW>
     <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => A): Effect.Effect<A, ER | EW, RR | RW>
 } = Function.dual(2, <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => A) =>
-    self.modify<A, never, never>(a => {
+    self.modifyEffect<A, never, never>(a => {
         const next = f(a)
         return Effect.succeed([next, next] as const)
     }),
@@ -567,7 +983,7 @@ export const updateAndGetEffect: {
     <A, ER, EW, RR, RW, E, R>(f: (a: A) => Effect.Effect<A, E, R>): (self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<A, ER | EW | E, RR | RW | R>
     <A, ER, EW, RR, RW, E, R>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => Effect.Effect<A, E, R>): Effect.Effect<A, ER | EW | E, RR | RW | R>
 } = Function.dual(2, <A, ER, EW, RR, RW, E, R>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => Effect.Effect<A, E, R>) =>
-    self.modify<A, E, R>(a => Effect.flatMap(
+    self.modifyEffect<A, E, R>(a => Effect.flatMap(
         f(a),
         next => Effect.succeed([next, next] as const),
     )),

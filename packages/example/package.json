@@ -10,12 +10,13 @@
     "clean:modules": "rm -rf node_modules"
   },
   "dependencies": {
-    "@effect/platform": "^0.96.0",
+    "@effect/platform": "^0.96.1",
     "@effect/platform-browser": "^0.76.0",
-    "effect": "^3.21.0",
+    "@effect/platform-bun": "^0.89.0",
+    "effect": "^3.21.2",
     "effect-lens": "workspace:*"
   },
   "overrides": {
-    "effect": "^3.21.0"
+    "effect": "^3.21.2"
   }
 }

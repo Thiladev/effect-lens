@@ -28,7 +28,7 @@ Lens<
     A,   // Type of the value the lens is focused on
     ER,  // Errors that can happen when reading
     EW,  // Errors that can happen when writing
-    RE,  // Requirements for reading
+    RR,  // Requirements for reading
     RW   // Requirements for writing
 >
 ```
@@ -55,11 +55,14 @@ yield* Lens.update(lens, Array.replace(1, 1664))
 Currently available:
 - `fromSubscriptionRef`
 - `fromSynchronizedRef` (note: since `SynchronizedRef` is not reactive (does not produce a stream of value changes), the resulting Lens' `changes` stream will only emit the current value of the lens when evaluated, and nothing else)
-
-More to come!
+- `fromRef` (returns an effect because it creates an internal lock)
 
 #### Manually
-You can also create Lenses manually using `make` by providing a getter, a stream of changes and either a `set` or `modify` function depending on your needs.
+You can also create Lenses manually using `make` by providing:
+- `get`: an effect that reads the current value,
+- `changes`: a stream of value changes,
+- `commit`: an effectful write primitive,
+- `lock`: an effect that produces the lock used to serialize writes.
 
 You can get pretty creative! Here's an example of a Lens that points to a specific key of the browser `LocalStorage`:
 ```typescript
@@ -67,8 +70,9 @@ You can get pretty creative! Here's an example of a Lens that points to a specif
 const lens = Effect.all([
     KeyValueStore.KeyValueStore,
     Effect.succeed("someKey"),
+    Effect.makeSemaphore(1),
 ]).pipe(
-    Effect.map(([kv, key]) => Lens.make({
+    Effect.map(([kv, key, semaphore]) => Lens.make({
         get: kv.get(key),
 
         changes: kv.get(key).pipe(
@@ -83,9 +87,11 @@ const lens = Effect.all([
             Stream.unwrap,
         ),
 
-        set: a => Option.isSome(a)
+        commit: a => Option.isSome(a)
             ? kv.set(key, a.value)
             : kv.remove(key),
+
+        lock: Effect.succeed(semaphore.withPermits(1)),
     })),
 
     Effect.provide(BrowserKeyValueStore.layerLocalStorage),
@@ -94,20 +100,6 @@ const lens = Effect.all([
 ```
 
 Note: while Lens supports asynchronous effects for the proxy logic, we would recommend keeping them synchronous to preserve atomicity.
-
-If a `Lens` depends on a service in its environment, you can provide that service directly to the lens:
-```typescript
-class Offset extends Context.Tag("Offset")<Offset, { readonly value: number }>() {}
-
-const root = Lens.fromSubscriptionRef(ref)
-const offsetLens = Lens.mapEffect(
-    root,
-    n => Effect.map(Offset, ({ value }) => n + value),
-    (_n, next) => Effect.map(Offset, ({ value }) => next - value),
-)
-
-const runnableLens = Lens.provide(offsetLens, Offset, { value: 5 })
-```
 
 
 ### Focusing
@@ -181,8 +173,6 @@ Currently available:
 | `focusChunkAt` | Focuses to an indexed entry of a `Chunk`. Replaces the parent `Chunk` immutably when writing to the focused element | Immutable | |
 | `focusOption` | Focuses to the value inside an `Option`. Wraps writes back into `Option.some` | Immutable | Reading or writing fails with `NoSuchElementException` when the parent option is `None` |
 
-Also more to come!
-
 #### Manually
 You can create focused Lenses by composing them manually using `map`, `mapEffect` and `unwrap`:
 ```typescript
@@ -209,6 +199,42 @@ const benzemonstreLens = ref.pipe(
 // Both Array.get and Array.replaceOption return an Option
 // When evaluated by the lens, Option<A> becomes Effect<A, NoSuchElementException>
 // As you can see, this is automatically tracked by the Lens type
+```
+
+#### Low-level derived lenses
+For advanced cases, you can derive a Lens manually using `derive`. This is the primitive used by the built-in transforms.
+
+A derived Lens describes how to transform three parent channels:
+- `resolve`: reads the parent and returns the focused value plus a `commit` function to rebuild the parent,
+- `mapStream`: transforms the parent `changes` stream,
+- `mapLock`: transforms the parent write lock.
+
+Most custom focusing logic should use `map` or `mapEffect`, but `derive` is useful when you need full control over read, stream, lock, and write-back behavior.
+
+```typescript
+declare const lens: Lens.Lens<User, never, never, never, never>
+
+const nameLens = lens.pipe(
+    Lens.derive({
+        resolve: parent => Effect.map(
+            parent,
+            resolved => ({
+                value: resolved.value.name,
+                commit: next => resolved.commit(
+                    Effect.map(next, name => ({
+                        ...resolved.value,
+                        name,
+                    })),
+                ),
+            }),
+        ),
+
+        mapStream: Stream.map(user => user.name),
+
+        // This derived Lens does not add lock behavior, so it reuses the parent lock.
+        mapLock: identity,
+    }),
+)
 ```
 
 
@@ -255,8 +281,11 @@ Currently available:
 | - | - |
 | `focusObjectOn` | Focuses to the field of an object |
 | `focusArrayAt` | Focuses to an indexed entry of an array |
+| `focusArrayLength` | Focuses to the length of an array |
 | `focusTupleAt` | Focuses to an indexed entry of a tuple |
 | `focusChunkAt` | Focuses to an indexed entry of a `Chunk` |
+| `focusChunkSize` | Focuses to the size of a `Chunk` |
+| `focusIterableSize` | Focuses to the size of an iterable |
 
 
 ## Todo
