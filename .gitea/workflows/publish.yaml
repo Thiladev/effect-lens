@@ -30,3 +30,13 @@ jobs:
           access: public
           token: ${{ secrets.NPM_TOKEN }}
           registry: https://registry.npmjs.org
+      - name: Prepare effect-lens beta
+        run: npm pkg set name=effect-lens --prefix packages/effect-lens-next
+      - name: Publish effect-lens beta
+        uses: JS-DevTools/npm-publish@v4
+        with:
+          package: packages/effect-lens-next
+          tag: beta
+          access: public
+          token: ${{ secrets.NPM_TOKEN }}
+          registry: https://registry.npmjs.org

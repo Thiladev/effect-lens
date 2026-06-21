@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { Chunk, Context, Effect, Either, identity, Option, Stream, SubscriptionRef } from "effect"
+import { Chunk, Context, Effect, Fiber, identity, Option, Ref, Result, Stream, SubscriptionRef, SynchronizedRef } from "effect"
 import * as Lens from "./Lens.js"
 
 
 describe("Lens", () => {
-    class Offset extends Context.Tag("Offset")<Offset, { readonly value: number }>() {}
+    class Offset extends Context.Service<Offset, { readonly value: number }>()("Offset") {}
 
     test("mapErrorRead transforms read errors", async () => {
         const lens = Lens.mapErrorRead(
@@ -17,9 +17,9 @@ describe("Lens", () => {
             error => `mapped:${ error }`,
         )
 
-        const result = await Effect.runPromise(Effect.either(Lens.get(lens)))
+        const result = await Effect.runPromise(Effect.result(Lens.get(lens)))
 
-        expect(result).toEqual(Either.left("mapped:read"))
+        expect(result).toEqual(Result.fail("mapped:read"))
     })
 
     test("mapErrorWrite transforms modify errors", async () => {
@@ -33,9 +33,9 @@ describe("Lens", () => {
             () => "mapped-write",
         )
 
-        const result = await Effect.runPromise(Effect.either(Lens.set(lens, 2)))
+        const result = await Effect.runPromise(Effect.result(Lens.set(lens, 2)))
 
-        expect(result).toEqual(Either.left("mapped-write"))
+        expect(result).toEqual(Result.fail("mapped-write"))
     })
 
     test("mapError transforms read and modify errors", async () => {
@@ -50,12 +50,12 @@ describe("Lens", () => {
         )
 
         const result = await Effect.runPromise(Effect.all([
-            Effect.either(Lens.get(lens)),
-            Effect.either(Lens.set(lens, 1)),
+            Effect.result(Lens.get(lens)),
+            Effect.result(Lens.set(lens, 1)),
         ] as const))
 
-        expect(result[0]).toEqual(Either.left("mapped"))
-        expect(result[1]).toEqual(Either.left("mapped"))
+        expect(result[0]).toEqual(Result.fail("mapped"))
+        expect(result[1]).toEqual(Result.fail("mapped"))
     })
 
     test("tapErrorRead runs an effect on read failures", async () => {
@@ -73,8 +73,8 @@ describe("Lens", () => {
                         () => SubscriptionRef.modify(counter, n => [void 0, n + 1] as const),
                     )
                     return Effect.flatMap(
-                        Effect.either(Lens.get(lens)),
-                        () => counter.get,
+                        Effect.result(Lens.get(lens)),
+                        () => SubscriptionRef.get(counter),
                     )
                 },
             ),
@@ -98,8 +98,8 @@ describe("Lens", () => {
                         () => SubscriptionRef.modify(counter, n => [void 0, n + 1] as const),
                     )
                     return Effect.flatMap(
-                        Effect.either(Lens.set(lens, 2)),
-                        () => counter.get,
+                        Effect.result(Lens.set(lens, 2)),
+                        () => SubscriptionRef.get(counter),
                     )
                 },
             ),
@@ -122,7 +122,7 @@ describe("Lens", () => {
                         Lens.get(lens),
                         value => Effect.flatMap(
                             Lens.set(lens, Option.some(100)),
-                            () => Effect.map(parent.get, parentValue => [value, parentValue] as const),
+                            () => Effect.map(SubscriptionRef.get(parent), parentValue => [value, parentValue] as const),
                         ),
                     )
                 },
@@ -147,7 +147,7 @@ describe("Lens", () => {
                         Lens.get(lens),
                         value => Effect.flatMap(
                             Lens.set(lens, Option.some(100)),
-                            () => Effect.map(parent.get, parentValue => [value, parentValue] as const),
+                            () => Effect.map(SubscriptionRef.get(parent), parentValue => [value, parentValue] as const),
                         ),
                     )
                 },
@@ -176,7 +176,7 @@ describe("Lens", () => {
                         Lens.get(lens),
                         value => Effect.flatMap(
                             Lens.set(lens, 30),
-                            () => Effect.map(parent.get, parentValue => [value, parentValue] as const),
+                            () => Effect.map(SubscriptionRef.get(parent), parentValue => [value, parentValue] as const),
                         ),
                     )
                 },
@@ -185,6 +185,22 @@ describe("Lens", () => {
 
         expect(result[0]).toBe(15)
         expect(result[1]).toBe(25)
+    })
+
+    test("Ref and SynchronizedRef adapters read and update their sources", async () => {
+        const result = await Effect.runPromise(Effect.gen(function*() {
+            const ref = yield* Ref.make(1)
+            const refLens = yield* Lens.fromRef(ref)
+            yield* Lens.update(refLens, n => n + 1)
+
+            const synchronizedRef = yield* SynchronizedRef.make(10)
+            const synchronizedLens = Lens.fromSynchronizedRef(synchronizedRef)
+            yield* Lens.updateEffect(synchronizedLens, n => Effect.succeed(n + 5))
+
+            return [yield* Ref.get(ref), yield* SynchronizedRef.get(synchronizedRef)] as const
+        }))
+
+        expect(result).toEqual([2, 15])
     })
 
     test("modifyEffect updates are atomic under concurrency", async () => {
@@ -200,11 +216,11 @@ describe("Lens", () => {
                         Array.from({ length: iterations }),
                         () => Lens.updateEffect(
                             countLens,
-                            count => Effect.as(Effect.yieldNow(), count + 1),
+                            count => Effect.as(Effect.yieldNow, count + 1),
                         ),
                         { concurrency: "unbounded", discard: true },
                     ),
-                    () => parent.get,
+                    () => SubscriptionRef.get(parent),
                 )
             },
         ))
@@ -225,11 +241,11 @@ describe("Lens", () => {
                         Array.from({ length: iterations }),
                         () => Lens.updateEffect(
                             lens,
-                            count => Effect.as(Effect.yieldNow(), count + 1),
+                            count => Effect.as(Effect.yieldNow, count + 1),
                         ),
                         { concurrency: "unbounded", discard: true },
                     ),
-                    () => Effect.all([Lens.get(lens), parent.get] as const),
+                    () => Effect.all([Lens.get(lens), SubscriptionRef.get(parent)] as const),
                 )
             },
         ))
@@ -247,7 +263,7 @@ describe("Lens", () => {
                         Lens.get(countLens),
                         count => Effect.flatMap(
                             Lens.set(countLens, count + 5),
-                            () => Effect.map(parent.get, state => [count, state] as const),
+                            () => Effect.map(SubscriptionRef.get(parent), state => [count, state] as const),
                         ),
                     )
                 },
@@ -267,7 +283,7 @@ describe("Lens", () => {
                     const detailLens = Lens.focusObjectOnWritable(Lens.fromSubscriptionRef(parent), "detail")
                     return Effect.flatMap(
                         Lens.set(detailLens, "mutated"),
-                        () => parent.get,
+                        () => SubscriptionRef.get(parent),
                     )
                 },
             ),
@@ -285,7 +301,7 @@ describe("Lens", () => {
                     const elementLens = Lens.focusArrayAt(Lens.fromSubscriptionRef(parent), 1)
                     return Effect.flatMap(
                         Lens.update(elementLens, value => value + 5),
-                        () => parent.get,
+                        () => SubscriptionRef.get(parent),
                     )
                 },
             ),
@@ -303,7 +319,7 @@ describe("Lens", () => {
                     const elementLens = Lens.focusMutableArrayAt(Lens.fromSubscriptionRef(parent), 0)
                     return Effect.flatMap(
                         Lens.set(elementLens, "baz"),
-                        () => parent.get,
+                        () => SubscriptionRef.get(parent),
                     )
                 },
             ),
@@ -321,7 +337,7 @@ describe("Lens", () => {
                     const elementLens = Lens.focusTupleAt(Lens.fromSubscriptionRef(parent), 1)
                     return Effect.flatMap(
                         Lens.set(elementLens, "updated"),
-                        () => parent.get,
+                        () => SubscriptionRef.get(parent),
                     )
                 },
             ),
@@ -339,7 +355,7 @@ describe("Lens", () => {
                     const elementLens = Lens.focusMutableTupleAt(Lens.fromSubscriptionRef(parent), 0)
                     return Effect.flatMap(
                         Lens.set(elementLens, "baz"),
-                        () => parent.get,
+                        () => SubscriptionRef.get(parent),
                     )
                 },
             ),
@@ -357,7 +373,7 @@ describe("Lens", () => {
                     const elementLens = Lens.focusChunkAt(Lens.fromSubscriptionRef(parent), 2)
                     return Effect.flatMap(
                         Lens.set(elementLens, 99),
-                        () => parent.get,
+                        () => SubscriptionRef.get(parent),
                     )
                 },
             ),
@@ -376,7 +392,7 @@ describe("Lens", () => {
                         Lens.get(lens),
                         value => Effect.flatMap(
                             Lens.set(lens, 100),
-                            () => Effect.map(parent.get, parentValue => [value, parentValue] as const),
+                            () => Effect.map(SubscriptionRef.get(parent), parentValue => [value, parentValue] as const),
                         ),
                     )
                 },
@@ -394,16 +410,16 @@ describe("Lens", () => {
                 parent => {
                     const lens = Lens.focusOption(Lens.fromSubscriptionRef(parent))
                     return Effect.all([
-                        Effect.either(Lens.get(lens)),
-                        Effect.either(Lens.set(lens, 100)),
-                        parent.get,
+                        Effect.result(Lens.get(lens)),
+                        Effect.result(Lens.set(lens, 100)),
+                        SubscriptionRef.get(parent),
                     ] as const)
                 },
             ),
         )
 
-        expect(result[0]._tag).toBe("Left")
-        expect(result[1]._tag).toBe("Left")
+        expect(result[0]._tag).toBe("Failure")
+        expect(result[1]._tag).toBe("Failure")
         expect(result[2]).toEqual(Option.none())
     })
 
@@ -413,7 +429,7 @@ describe("Lens", () => {
             const lens = Lens.fromSubscriptionRef(parent)
             const previous = yield* Lens.modify(lens, n => [`value:${ n }`, n + 1] as const)
             const doubled = yield* lens.pipe(Lens.modifyEffect(n => Effect.succeed([n * 2, n + 2] as const)))
-            const current = yield* parent.get
+            const current = yield* SubscriptionRef.get(parent)
             return [previous, doubled, current] as const
         }))
 
@@ -424,10 +440,10 @@ describe("Lens", () => {
         const result = await Effect.runPromise(Effect.gen(function*() {
             const parent = yield* SubscriptionRef.make(1)
             const lens = Lens.fromSubscriptionRef(parent)
-            const fallback = yield* Lens.modifySome(lens, "fallback", () => Option.none())
-            const modified = yield* lens.pipe(Lens.modifySome("fallback", n => {
+            const fallback = yield* Lens.modifySome(lens, () => ["fallback", Option.none()] as const)
+            const modified = yield* lens.pipe(Lens.modifySome(n => {
                 n satisfies number
-                return Option.some([`value:${ n }`, n + 1] as const)
+                return [`value:${ n }`, Option.some(n + 1)] as const
             }))
             const previous = yield* lens.pipe(Lens.getAndUpdateSome(n => {
                 n satisfies number
@@ -443,7 +459,7 @@ describe("Lens", () => {
                 n satisfies number
                 return Option.some(n + 1)
             }))
-            return [fallback, modified, previous, current, updated, yield* parent.get] as const
+            return [fallback, modified, previous, current, updated, yield* SubscriptionRef.get(parent)] as const
         }))
 
         expect(result).toEqual(["fallback", "value:1", 2, 4, 5, 5])
@@ -453,40 +469,58 @@ describe("Lens", () => {
         const result = await Effect.runPromise(Effect.gen(function*() {
             const parent = yield* SubscriptionRef.make(10)
             const lens = Lens.fromSubscriptionRef(parent)
-            const modifyNone: Effect.Effect<string> = Lens.modifySomeEffect(lens, "fallback", () => Option.none())
+            const modifyNone: Effect.Effect<string> = Lens.modifySomeEffect(
+                lens,
+                () => Effect.succeed(["fallback", Option.none()] as const),
+            )
             const fallback = yield* modifyNone
             const modify: Effect.Effect<string> = lens.pipe(Lens.modifySomeEffect(
-                "fallback",
                 n => {
                     n satisfies number
-                    return Option.some(Effect.succeed([`value:${ n }`, n + 1] as const))
+                    return Effect.succeed([`value:${ n }`, Option.some(n + 1)] as const)
                 },
             ))
             const modified = yield* modify
             const getAndUpdate: Effect.Effect<number> = lens.pipe(Lens.getAndUpdateSomeEffect(n => {
                 n satisfies number
-                return Option.some(Effect.succeed(n + 1))
+                return Effect.succeed(Option.some(n + 1))
             }))
-            const getAndUpdateNone: Effect.Effect<number> = lens.pipe(Lens.getAndUpdateSomeEffect(() => Option.none()))
-            const updateNone: Effect.Effect<void> = lens.pipe(Lens.updateSomeEffect(() => Option.none()))
+            const getAndUpdateNone: Effect.Effect<number> = lens.pipe(Lens.getAndUpdateSomeEffect(() => Effect.succeed(Option.none())))
+            const updateNone: Effect.Effect<void> = lens.pipe(Lens.updateSomeEffect(() => Effect.succeed(Option.none())))
             const update: Effect.Effect<void> = lens.pipe(Lens.updateSomeEffect(n => {
                 n satisfies number
-                return Option.some(Effect.succeed(n + 1))
+                return Effect.succeed(Option.some(n + 1))
             }))
             const previous = yield* getAndUpdate
             const unchanged = yield* getAndUpdateNone
             yield* updateNone
             yield* update
-            const updateAndGetNone: Effect.Effect<number> = lens.pipe(Lens.updateSomeAndGetEffect(() => Option.none()))
+            const updateAndGetNone: Effect.Effect<number> = lens.pipe(Lens.updateSomeAndGetEffect(() => Effect.succeed(Option.none())))
             const current = yield* updateAndGetNone
             const updated = yield* lens.pipe(Lens.updateSomeAndGetEffect(n => {
                 n satisfies number
-                return Option.some(Effect.succeed(n + 1))
+                return Effect.succeed(Option.some(n + 1))
             }))
-            return [fallback, modified, previous, unchanged, current, updated, yield* parent.get] as const
+            return [fallback, modified, previous, unchanged, current, updated, yield* SubscriptionRef.get(parent)] as const
         }))
 
         expect(result).toEqual(["fallback", "value:10", 11, 12, 13, 14, 14])
+    })
+
+    test("conditional updates do not publish when the next value is None", async () => {
+        const events = await Effect.runPromise(Effect.gen(function*() {
+            const parent = yield* SubscriptionRef.make(0)
+            const lens = Lens.fromSubscriptionRef(parent)
+            const fiber = yield* Effect.forkChild(Stream.runCollect(Stream.take(lens.changes, 2)))
+
+            yield* Effect.yieldNow
+            yield* Lens.updateSome(lens, () => Option.none())
+            yield* Lens.updateSome(lens, n => Option.some(n + 1))
+
+            return yield* Fiber.join(fiber)
+        }))
+
+        expect(events).toEqual([0, 1])
     })
 
     // test("changes stream emits updates when lens mutates state", async () => {

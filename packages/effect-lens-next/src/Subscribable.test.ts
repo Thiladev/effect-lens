@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Chunk, Effect, Stream, SubscriptionRef } from "effect"
+import * as Lens from "./Lens.js"
 import * as Subscribable from "./Subscribable.js"
 
 
@@ -36,12 +37,12 @@ describe("Subscribable", () => {
         expect(observed).toEqual(["get", "changes"])
     })
 
-    test("catchAll recovers get and changes with the corresponding fallback channel", async () => {
+    test("catch recovers get and changes with the corresponding fallback channel", async () => {
         const source = Subscribable.make({
             get: Effect.fail("get"),
             changes: Stream.fail("changes"),
         })
-        const recovered = source.pipe(Subscribable.catchAll(() => Subscribable.make({
+        const recovered = source.pipe(Subscribable.catch(() => Subscribable.make({
             get: Effect.succeed("fallback-get"),
             changes: Stream.succeed("fallback-changes"),
         })))
@@ -76,7 +77,7 @@ describe("Subscribable", () => {
             Effect.flatMap(
                 SubscriptionRef.make([1, 2, 3]),
                 parent => {
-                    const sizeSub = Subscribable.focusArrayLength(parent)
+                    const sizeSub = Subscribable.focusArrayLength(Lens.fromSubscriptionRef(parent))
                     return Effect.flatMap(
                         sizeSub.get,
                         initial => Effect.flatMap(
@@ -96,7 +97,7 @@ describe("Subscribable", () => {
             Effect.flatMap(
                 SubscriptionRef.make(Chunk.make(1, 2) as Chunk.Chunk<number>),
                 parent => {
-                    const sizeSub = Subscribable.focusChunkSize(parent)
+                    const sizeSub = Subscribable.focusChunkSize(Lens.fromSubscriptionRef(parent))
                     return Effect.flatMap(
                         sizeSub.get,
                         initial => Effect.flatMap(
@@ -116,7 +117,7 @@ describe("Subscribable", () => {
             Effect.flatMap(
                 SubscriptionRef.make([1, 2, 3]),
                 parent => {
-                    const sizeSub = Subscribable.focusIterableSize(parent)
+                    const sizeSub = Subscribable.focusIterableSize(Lens.fromSubscriptionRef(parent))
                     return Effect.flatMap(
                         sizeSub.get,
                         initial => Effect.flatMap(

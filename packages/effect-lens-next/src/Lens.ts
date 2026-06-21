@@ -1,9 +1,25 @@
-import { Array, Chunk, type Context, Effect, Function, identity, Option, Pipeable, Predicate, PubSub, Readable, Ref, Stream, type SubscriptionRef, type SynchronizedRef } from "effect"
-import type { NoSuchElementException } from "effect/Cause"
+import {
+    Array,
+    type Cause,
+    Chunk,
+    type Context,
+    Effect,
+    Function,
+    identity,
+    Option,
+    Pipeable,
+    Predicate,
+    PubSub,
+    Ref,
+    Semaphore,
+    Stream,
+    SubscriptionRef,
+    SynchronizedRef,
+} from "effect"
 import * as Subscribable from "./Subscribable.js"
 
 
-export const LensTypeId: unique symbol = Symbol.for("@effect-fc/Lens/Lens")
+export const LensTypeId: unique symbol = Symbol.for("@effect-fc/Lens/v4/Lens")
 export type LensTypeId = typeof LensTypeId
 
 /**
@@ -20,6 +36,10 @@ extends Subscribable.Subscribable<A, ER, RR> {
     readonly modifyEffect: <B, E1 = never, R1 = never>(
         f: (a: A) => Effect.Effect<readonly [B, A], E1, R1>
     ) => Effect.Effect<B, ER | EW | E1, RR | RW | R1>
+
+    readonly modifySomeEffect: <B, E1 = never, R1 = never>(
+        f: (a: A) => Effect.Effect<readonly [B, Option.Option<A>], E1, R1>
+    ) => Effect.Effect<B, ER | EW | E1, RR | RW | R1>
 }
 
 /**
@@ -28,7 +48,7 @@ extends Subscribable.Subscribable<A, ER, RR> {
 export const isLens = (u: unknown): u is Lens<unknown, unknown, unknown, unknown, unknown> => Predicate.hasProperty(u, LensTypeId)
 
 
-export const LensImplTypeId: unique symbol = Symbol.for("@effect-fc/Lens/LensImpl")
+export const LensImplTypeId: unique symbol = Symbol.for("@effect-fc/Lens/v4/LensImpl")
 export type LensImplTypeId = typeof LensImplTypeId
 
 export declare namespace LensImpl {
@@ -45,9 +65,8 @@ export declare namespace LensImpl {
 }
 
 export abstract class LensImpl<in out A, in out ER = never, in out EW = never, in out RR = never, in out RW = never>
-extends Pipeable.Class() implements Lens<A, ER, EW, RR, RW> {
-    readonly [Readable.TypeId]: Readable.TypeId = Readable.TypeId
-    readonly [Subscribable.TypeId]: Subscribable.TypeId = Subscribable.TypeId
+extends Pipeable.Class implements Lens<A, ER, EW, RR, RW> {
+    readonly [Subscribable.SubscribableTypeId]: Subscribable.SubscribableTypeId = Subscribable.SubscribableTypeId
     readonly [LensTypeId]: LensTypeId = LensTypeId
     readonly [LensImplTypeId]: LensImplTypeId = LensImplTypeId
 
@@ -67,6 +86,24 @@ extends Pipeable.Class() implements Lens<A, ER, EW, RR, RW> {
                 resolved => Effect.flatMap(
                     f(resolved.value),
                     ([c, next]) => Effect.as(resolved.commit(Effect.succeed(next)), c),
+                ),
+            )),
+        )
+    }
+
+    modifySomeEffect<B, E1 = never, R1 = never>(
+        f: (a: A) => Effect.Effect<readonly [B, Option.Option<A>], E1, R1>,
+    ): Effect.Effect<B, ER | EW | E1, RR | RW | R1> {
+        return Effect.flatMap(
+            this.lock,
+            lock => lock(Effect.flatMap(
+                this.resolve,
+                resolved => Effect.flatMap(
+                    f(resolved.value),
+                    ([result, next]) => Option.match(next, {
+                        onSome: value => Effect.as(resolved.commit(Effect.succeed(value)), result),
+                        onNone: () => Effect.succeed(result),
+                    }),
                 ),
             )),
         )
@@ -159,7 +196,7 @@ export class RefLensImpl<in out A>
 extends LensImpl<A, never, never, never, never> {
     constructor(
         readonly ref: Ref.Ref<A>,
-        readonly semaphore: Effect.Semaphore,
+        readonly semaphore: Semaphore.Semaphore,
     ) {
         super()
     }
@@ -177,7 +214,7 @@ extends LensImpl<A, never, never, never, never> {
         )
     }
     get changes() { return Stream.unwrap(Effect.map(Ref.get(this.ref), Stream.make)) }
-    get lock() { return Effect.succeed(this.semaphore.withPermits(1)) }
+    get lock() { return Effect.succeed(this.semaphore.withPermit) }
 }
 
 /**
@@ -189,41 +226,33 @@ extends LensImpl<A, never, never, never, never> {
 export const fromRef = <A>(
     ref: Ref.Ref<A>
 ): Effect.Effect<Lens<A, never, never, never, never>, never, never> => Effect.map(
-    Effect.makeSemaphore(1),
+    Semaphore.make(1),
     semaphore => new RefLensImpl(ref, semaphore),
 )
 
 
-export declare namespace SynchronizedRefLensImpl {
-    export interface SynchronizedRefWithInternals<in out A>
-    extends SynchronizedRef.SynchronizedRef<A> {
-        readonly ref: Ref.Ref<A>
-        readonly withLock: LensImpl.Lock
-    }
-}
-
 export class SynchronizedRefLensImpl<in out A>
 extends LensImpl<A, never, never, never, never> {
     constructor(
-        readonly ref: SynchronizedRefLensImpl.SynchronizedRefWithInternals<A>
+        readonly ref: SynchronizedRef.SynchronizedRef<A>
     ) {
         super()
     }
 
     get resolve(): Effect.Effect<LensImpl.Resolved<A>, never, never> {
         return Effect.map(
-            Ref.get(this.ref.ref),
+            SynchronizedRef.get(this.ref),
             value => ({
                 value,
                 commit: next => Effect.flatMap(
                     next,
-                    value => Ref.set(this.ref.ref, value),
+                    value => Ref.set(this.ref.backing, value),
                 ),
             }),
         )
     }
-    get changes() { return Stream.unwrap(Effect.map(Ref.get(this.ref.ref), Stream.make)) }
-    get lock() { return Effect.succeed(this.ref.withLock) }
+    get changes() { return Stream.unwrap(Effect.map(SynchronizedRef.get(this.ref), Stream.make)) }
+    get lock() { return Effect.succeed(this.ref.semaphore.withPermit) }
 }
 
 /**
@@ -234,43 +263,34 @@ extends LensImpl<A, never, never, never, never> {
  */
 export const fromSynchronizedRef = <A>(
     ref: SynchronizedRef.SynchronizedRef<A>
-): Lens<A, never, never, never, never> => new SynchronizedRefLensImpl(ref as SynchronizedRefLensImpl.SynchronizedRefWithInternals<A>)
+): Lens<A, never, never, never, never> => new SynchronizedRefLensImpl(ref)
 
-
-export declare namespace SubscriptionRefLensImpl {
-    export interface SubscriptionRefWithInternals<in out A>
-    extends SubscriptionRef.SubscriptionRef<A> {
-        readonly ref: Ref.Ref<A>
-        readonly pubsub: PubSub.PubSub<A>
-        readonly semaphore: Effect.Semaphore
-    }
-}
 
 export class SubscriptionRefLensImpl<in out A>
 extends LensImpl<A, never, never, never, never> {
     constructor(
-        readonly ref: SubscriptionRefLensImpl.SubscriptionRefWithInternals<A>
+        readonly ref: SubscriptionRef.SubscriptionRef<A>
     ) {
         super()
     }
 
     get resolve(): Effect.Effect<LensImpl.Resolved<A>, never, never> {
         return Effect.map(
-            this.ref.get,
+            SubscriptionRef.get(this.ref),
             value => ({
                 value,
                 commit: next => Effect.flatMap(
                     next,
-                    value => Effect.zipLeft(
-                        Ref.set(this.ref.ref, value),
-                        PubSub.publish(this.ref.pubsub, value),
-                    ),
+                    value => Effect.sync(() => {
+                        this.ref.value = value
+                        PubSub.publishUnsafe(this.ref.pubsub, value)
+                    }),
                 ),
             }),
         )
     }
-    get changes() { return this.ref.changes }
-    get lock() { return Effect.succeed(this.ref.semaphore.withPermits(1)) }
+    get changes() { return SubscriptionRef.changes(this.ref) }
+    get lock() { return Effect.succeed(this.ref.semaphore.withPermit) }
 }
 
 /**
@@ -278,7 +298,7 @@ extends LensImpl<A, never, never, never, never> {
  */
 export const fromSubscriptionRef = <A>(
     ref: SubscriptionRef.SubscriptionRef<A>
-): Lens<A, never, never, never, never> => new SubscriptionRefLensImpl(ref as SubscriptionRefLensImpl.SubscriptionRefWithInternals<A>)
+): Lens<A, never, never, never, never> => new SubscriptionRefLensImpl(ref)
 
 
 export declare namespace DerivedLensImpl {
@@ -652,8 +672,8 @@ export const tapError: {
             ),
         }),
     ),
-    mapStream: Stream.tapError(f),
-    mapLock: Effect.tapError(f),
+    mapStream: Stream.tapError(e => f(e)),
+    mapLock: Effect.tapError(e => f(e)),
 }))
 
 
@@ -679,7 +699,7 @@ export const provideContext: {
             commit: next => Effect.provide(resolved.commit(next), context),
         }),
     ),
-    mapStream: Stream.provideSomeContext(context),
+    mapStream: Stream.provideContext(context),
     mapLock: Effect.provide(context),
 }))
 
@@ -687,21 +707,21 @@ export const provideContext: {
  * Provides a single service to a `Lens`, removing it from both the read and write environments.
  *
  * This is the `Lens` equivalent of `Effect.provideService`: use it when a lens requires one
- * `Context.Tag` and you already have the concrete service value.
+ * `Context.Key` and you already have the concrete service value.
  */
 export const provideService: {
     <I, S>(
-        tag: Context.Tag<I, S>,
+        tag: Context.Key<I, S>,
         service: NoInfer<S>,
     ): <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>) => Lens<A, ER, EW, Exclude<RR, I>, Exclude<RW, I>>
     <A, ER, EW, RR, RW, I, S>(
         self: Lens<A, ER, EW, RR, RW>,
-        tag: Context.Tag<I, S>,
+        tag: Context.Key<I, S>,
         service: NoInfer<S>,
     ): Lens<A, ER, EW, Exclude<RR, I>, Exclude<RW, I>>
 } = Function.dual(3, <A, ER, EW, RR, RW, I, S>(
     self: Lens<A, ER, EW, RR, RW>,
-    tag: Context.Tag<I, S>,
+    tag: Context.Key<I, S>,
     service: NoInfer<S>,
 ): Lens<A, ER, EW, Exclude<RR, I>, Exclude<RW, I>> => derive(self, {
     resolve: parent => Effect.map(
@@ -771,18 +791,18 @@ export const focusObjectOnWritable: {
 export const focusArrayAt: {
     <A extends readonly any[], ER, EW, RR, RW>(
         index: number
-    ): (self: Lens<A, ER, EW, RR, RW>) => Lens<A[number], ER | NoSuchElementException, EW | NoSuchElementException, RR, RW>
+    ): (self: Lens<A, ER, EW, RR, RW>) => Lens<A[number], ER | Cause.NoSuchElementError, EW | Cause.NoSuchElementError, RR, RW>
     <A extends readonly any[], ER, EW, RR, RW>(
         self: Lens<A, ER, EW, RR, RW>,
         index: number,
-    ): Lens<A[number], ER | NoSuchElementException, EW | NoSuchElementException, RR, RW>
+    ): Lens<A[number], ER | Cause.NoSuchElementError, EW | Cause.NoSuchElementError, RR, RW>
 } = Function.dual(2, <A extends readonly any[], ER, EW, RR, RW>(
     self: Lens<A, ER, EW, RR, RW>,
     index: number,
-): Lens<A[number], ER | NoSuchElementException, EW | NoSuchElementException, RR, RW> => mapEffect(
+): Lens<A[number], ER | Cause.NoSuchElementError, EW | Cause.NoSuchElementError, RR, RW> => mapEffect(
     self,
-    Array.get(index),
-    (a, b) => Array.replaceOption(a, index, b) as any,
+    a => Effect.fromOption(Array.get(a, index)),
+    (a, b) => Effect.fromOption(Array.replace(a, index, b)) as any,
 ))
 
 /**
@@ -791,19 +811,19 @@ export const focusArrayAt: {
 export const focusMutableArrayAt: {
     <A, ER, EW, RR, RW>(
         index: number
-    ): (self: Lens<A[], ER, EW, RR, RW>) => Lens<A, ER | NoSuchElementException, EW | NoSuchElementException, RR, RW>
+    ): (self: Lens<A[], ER, EW, RR, RW>) => Lens<A, ER | Cause.NoSuchElementError, EW | Cause.NoSuchElementError, RR, RW>
     <A, ER, EW, RR, RW>(
         self: Lens<A[], ER, EW, RR, RW>,
         index: number,
-    ): Lens<A, ER | NoSuchElementException, EW | NoSuchElementException, RR, RW>
+    ): Lens<A, ER | Cause.NoSuchElementError, EW | Cause.NoSuchElementError, RR, RW>
 } = Function.dual(2, <A, ER, EW, RR, RW>(
     self: Lens<A[], ER, EW, RR, RW>,
     index: number,
-): Lens<A, ER | NoSuchElementException, EW | NoSuchElementException, RR, RW> => mapEffect(
+): Lens<A, ER | Cause.NoSuchElementError, EW | Cause.NoSuchElementError, RR, RW> => mapEffect(
     self,
-    Array.get(index),
+    a => Effect.fromOption(Array.get(a, index)),
     (a, b) => Effect.flatMap(
-        Array.get(a, index),
+        Effect.fromOption(Array.get(a, index)),
         () => Effect.as(Effect.sync(() => { a[index] = b }), a),
     ),
 ))
@@ -824,8 +844,8 @@ export const focusTupleAt: {
     index: I,
 ): Lens<T[I], ER, EW, RR, RW> => map(
     self,
-    Array.unsafeGet(index),
-    (a, b) => Array.replace(a, index, b) as any,
+    Array.getUnsafe(index),
+    (a, b) => Option.getOrElse(Array.replace(a, index, b), () => a) as T,
 ))
 
 /**
@@ -844,7 +864,7 @@ export const focusMutableTupleAt: {
     index: I,
 ): Lens<T[I], ER, EW, RR, RW> => map(
     self,
-    Array.unsafeGet(index),
+    Array.getUnsafe(index),
     (a, b) => { a[index] = b; return a },
 ))
 
@@ -854,36 +874,36 @@ export const focusMutableTupleAt: {
 export const focusChunkAt: {
     <A, ER, EW, RR, RW>(
         index: number
-    ): (self: Lens<Chunk.Chunk<A>, ER, EW, RR, RW>) => Lens<A, ER | NoSuchElementException, EW, RR, RW>
+    ): (self: Lens<Chunk.Chunk<A>, ER, EW, RR, RW>) => Lens<A, ER | Cause.NoSuchElementError, EW, RR, RW>
     <A, ER, EW, RR, RW>(
         self: Lens<Chunk.Chunk<A>, ER, EW, RR, RW>,
         index: number,
-    ): Lens<A, ER | NoSuchElementException, EW, RR, RW>
+    ): Lens<A, ER | Cause.NoSuchElementError, EW, RR, RW>
 } = Function.dual(2, <A, ER, EW, RR, RW>(
     self: Lens<Chunk.Chunk<A>, ER, EW, RR, RW>,
     index: number,
-): Lens<A, ER | NoSuchElementException, EW, RR, RW> => mapEffect(
+): Lens<A, ER | Cause.NoSuchElementError, EW, RR, RW> => mapEffect(
     self,
-    Chunk.get(index),
-    (a, b) => Effect.succeed(Chunk.replace(a, index, b))),
+    chunk => Effect.fromOption(Chunk.get(chunk, index)),
+    (chunk, value) => Effect.succeed(Option.getOrElse(Chunk.replace(chunk, index, value), () => chunk))),
 )
 
 /**
  * Narrows the focus to the value inside an `Option`.
  *
- * Reading or writing through this lens fails with `NoSuchElementException` when the parent option is `None`.
+ * Reading or writing through this lens fails with `NoSuchElementError` when the parent option is `None`.
  * Writing wraps the new focused value back into `Option.some`.
  */
 export const focusOption: {
     <A, ER, EW, RR, RW>(
         self: Lens<Option.Option<A>, ER, EW, RR, RW>,
-    ): Lens<A, ER | NoSuchElementException, EW | NoSuchElementException, RR, RW>
+    ): Lens<A, ER | Cause.NoSuchElementError, EW | Cause.NoSuchElementError, RR, RW>
 } = <A, ER, EW, RR, RW>(
     self: Lens<Option.Option<A>, ER, EW, RR, RW>,
-): Lens<A, ER | NoSuchElementException, EW | NoSuchElementException, RR, RW> => mapEffect(
+): Lens<A, ER | Cause.NoSuchElementError, EW | Cause.NoSuchElementError, RR, RW> => mapEffect(
     self,
-    identity,
-    (a, b) => Effect.map(a, () => Option.some(b)),
+    Effect.fromOption,
+    (option, value) => Effect.as(Effect.fromOption(option), Option.some(value)),
 )
 
 
@@ -913,23 +933,23 @@ export const modifyEffect: {
 )
 
 /**
- * Conditionally modifies the value of a `Lens`, returning `fallback` when the function returns `None`.
+ * Conditionally modifies a `Lens` without committing when the next value is `None`.
  */
 export const modifySome: {
-    <B, A>(fallback: B, pf: (a: NoInfer<A>) => Option.Option<readonly [B, NoInfer<A>]>): <ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<B, ER | EW, RR | RW>
-    <A, ER, EW, RR, RW, B>(self: Lens<A, ER, EW, RR, RW>, fallback: B, pf: (a: A) => Option.Option<readonly [B, A]>): Effect.Effect<B, ER | EW, RR | RW>
-} = Function.dual(3, <A, ER, EW, RR, RW, B>(self: Lens<A, ER, EW, RR, RW>, fallback: B, pf: (a: A) => Option.Option<readonly [B, A]>) =>
-    self.modifyEffect<B, never, never>(a => Effect.succeed(Option.getOrElse(pf(a), () => [fallback, a] as const))),
+    <B, A>(f: (a: NoInfer<A>) => readonly [B, Option.Option<NoInfer<A>>]): <ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<B, ER | EW, RR | RW>
+    <A, ER, EW, RR, RW, B>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => readonly [B, Option.Option<A>]): Effect.Effect<B, ER | EW, RR | RW>
+} = Function.dual(2, <A, ER, EW, RR, RW, B>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => readonly [B, Option.Option<A>]) =>
+    self.modifySomeEffect<B, never, never>(a => Effect.succeed(f(a))),
 )
 
 /**
- * Conditionally modifies the value of a `Lens` with an effect, returning `fallback` when the function returns `None`.
+ * Conditionally modifies a `Lens` with an effect without committing when the next value is `None`.
  */
 export const modifySomeEffect: {
-    <B, A, E = never, R = never>(fallback: B, pf: (a: NoInfer<A>) => Option.Option<Effect.Effect<readonly [B, NoInfer<A>], E, R>>): <ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<B, ER | EW | E, RR | RW | R>
-    <A, ER, EW, RR, RW, B, E = never, R = never>(self: Lens<A, ER, EW, RR, RW>, fallback: B, pf: (a: A) => Option.Option<Effect.Effect<readonly [B, A], E, R>>): Effect.Effect<B, ER | EW | E, RR | RW | R>
-} = Function.dual(3, <A, ER, EW, RR, RW, B, E, R>(self: Lens<A, ER, EW, RR, RW>, fallback: B, pf: (a: A) => Option.Option<Effect.Effect<readonly [B, A], E, R>>) =>
-    self.modifyEffect<B, E, R>(a => Option.getOrElse(pf(a), () => Effect.succeed([fallback, a] as const))),
+    <B, A, E = never, R = never>(f: (a: NoInfer<A>) => Effect.Effect<readonly [B, Option.Option<NoInfer<A>>], E, R>): <ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<B, ER | EW | E, RR | RW | R>
+    <A, ER, EW, RR, RW, B, E = never, R = never>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => Effect.Effect<readonly [B, Option.Option<A>], E, R>): Effect.Effect<B, ER | EW | E, RR | RW | R>
+} = Function.dual(2, <A, ER, EW, RR, RW, B, E, R>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => Effect.Effect<readonly [B, Option.Option<A>], E, R>) =>
+    self.modifySomeEffect(f),
 )
 
 /**
@@ -1005,18 +1025,18 @@ export const getAndUpdateSome: {
     <A>(pf: (a: NoInfer<A>) => Option.Option<NoInfer<A>>): <ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<A, ER | EW, RR | RW>
     <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Option.Option<A>): Effect.Effect<A, ER | EW, RR | RW>
 } = Function.dual(2, <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Option.Option<A>) =>
-    self.modifyEffect<A, never, never>(a => Effect.succeed([a, Option.getOrElse(pf(a), () => a)] as const)),
+    self.modifySomeEffect<A, never, never>(a => Effect.succeed([a, pf(a)] as const)),
 )
 
 /**
  * Conditionally updates a `Lens` with an effect and returns the previous value.
  */
 export const getAndUpdateSomeEffect: {
-    <A, E = never, R = never>(pf: (a: NoInfer<A>) => Option.Option<Effect.Effect<NoInfer<A>, E, R>>): <ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<A, ER | EW | E, RR | RW | R>
-    <A, ER, EW, RR, RW, E = never, R = never>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Option.Option<Effect.Effect<A, E, R>>): Effect.Effect<A, ER | EW | E, RR | RW | R>
-} = Function.dual(2, <A, ER, EW, RR, RW, E, R>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Option.Option<Effect.Effect<A, E, R>>) =>
-    self.modifyEffect<A, E, R>(a => Effect.map(
-        Option.getOrElse(pf(a), () => Effect.succeed(a)),
+    <A, E = never, R = never>(pf: (a: NoInfer<A>) => Effect.Effect<Option.Option<NoInfer<A>>, E, R>): <ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<A, ER | EW | E, RR | RW | R>
+    <A, ER, EW, RR, RW, E = never, R = never>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Effect.Effect<Option.Option<A>, E, R>): Effect.Effect<A, ER | EW | E, RR | RW | R>
+} = Function.dual(2, <A, ER, EW, RR, RW, E, R>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Effect.Effect<Option.Option<A>, E, R>) =>
+    self.modifySomeEffect<A, E, R>(a => Effect.map(
+        pf(a),
         next => [a, next] as const,
     )),
 )
@@ -1064,18 +1084,18 @@ export const updateSome: {
     <A>(pf: (a: NoInfer<A>) => Option.Option<NoInfer<A>>): <ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<void, ER | EW, RR | RW>
     <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Option.Option<A>): Effect.Effect<void, ER | EW, RR | RW>
 } = Function.dual(2, <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Option.Option<A>) =>
-    self.modifyEffect<void, never, never>(a => Effect.succeed([void 0, Option.getOrElse(pf(a), () => a)] as const)),
+    self.modifySomeEffect<void, never, never>(a => Effect.succeed([void 0, pf(a)] as const)),
 )
 
 /**
  * Conditionally updates the value of a `Lens` with an effect.
  */
 export const updateSomeEffect: {
-    <A, E = never, R = never>(pf: (a: NoInfer<A>) => Option.Option<Effect.Effect<NoInfer<A>, E, R>>): <ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<void, ER | EW | E, RR | RW | R>
-    <A, ER, EW, RR, RW, E = never, R = never>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Option.Option<Effect.Effect<A, E, R>>): Effect.Effect<void, ER | EW | E, RR | RW | R>
-} = Function.dual(2, <A, ER, EW, RR, RW, E, R>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Option.Option<Effect.Effect<A, E, R>>) =>
-    self.modifyEffect<void, E, R>(a => Effect.map(
-        Option.getOrElse(pf(a), () => Effect.succeed(a)),
+    <A, E = never, R = never>(pf: (a: NoInfer<A>) => Effect.Effect<Option.Option<NoInfer<A>>, E, R>): <ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<void, ER | EW | E, RR | RW | R>
+    <A, ER, EW, RR, RW, E = never, R = never>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Effect.Effect<Option.Option<A>, E, R>): Effect.Effect<void, ER | EW | E, RR | RW | R>
+} = Function.dual(2, <A, ER, EW, RR, RW, E, R>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Effect.Effect<Option.Option<A>, E, R>) =>
+    self.modifySomeEffect<void, E, R>(a => Effect.map(
+        pf(a),
         next => [void 0, next] as const,
     )),
 )
@@ -1087,21 +1107,24 @@ export const updateSomeAndGet: {
     <A>(pf: (a: NoInfer<A>) => Option.Option<NoInfer<A>>): <ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<A, ER | EW, RR | RW>
     <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Option.Option<A>): Effect.Effect<A, ER | EW, RR | RW>
 } = Function.dual(2, <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Option.Option<A>) =>
-    self.modifyEffect<A, never, never>(a => {
-        const next = Option.getOrElse(pf(a), () => a)
-        return Effect.succeed([next, next] as const)
-    }),
+    self.modifySomeEffect<A, never, never>(a => Effect.succeed(Option.match(pf(a), {
+        onNone: () => [a, Option.none()] as const,
+        onSome: next => [next, Option.some(next)] as const,
+    }))),
 )
 
 /**
  * Conditionally updates a `Lens` with an effect and returns the resulting value.
  */
 export const updateSomeAndGetEffect: {
-    <A, E = never, R = never>(pf: (a: NoInfer<A>) => Option.Option<Effect.Effect<NoInfer<A>, E, R>>): <ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<A, ER | EW | E, RR | RW | R>
-    <A, ER, EW, RR, RW, E = never, R = never>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Option.Option<Effect.Effect<A, E, R>>): Effect.Effect<A, ER | EW | E, RR | RW | R>
-} = Function.dual(2, <A, ER, EW, RR, RW, E, R>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Option.Option<Effect.Effect<A, E, R>>) =>
-    self.modifyEffect<A, E, R>(a => Effect.map(
-        Option.getOrElse(pf(a), () => Effect.succeed(a)),
-        next => [next, next] as const,
+    <A, E = never, R = never>(pf: (a: NoInfer<A>) => Effect.Effect<Option.Option<NoInfer<A>>, E, R>): <ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<A, ER | EW | E, RR | RW | R>
+    <A, ER, EW, RR, RW, E = never, R = never>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Effect.Effect<Option.Option<A>, E, R>): Effect.Effect<A, ER | EW | E, RR | RW | R>
+} = Function.dual(2, <A, ER, EW, RR, RW, E, R>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Effect.Effect<Option.Option<A>, E, R>) =>
+    self.modifySomeEffect<A, E, R>(a => Effect.map(
+        pf(a),
+        next => Option.match(next, {
+            onNone: () => [a, Option.none()] as const,
+            onSome: value => [value, Option.some(value)] as const,
+        }),
     )),
 )
