@@ -4,13 +4,13 @@ A Lens type for [Effect](https://effect.website/) to easily manage nested state.
 
 ## Install
 ```
-npm install effect-lens@beta effect@4.0.0-beta.85
-yarn add effect-lens@beta effect@4.0.0-beta.85
-bun add effect-lens@beta effect@4.0.0-beta.85
+npm install effect-lens@beta effect@4.0.0-beta.98
+yarn add effect-lens@beta effect@4.0.0-beta.98
+bun add effect-lens@beta effect@4.0.0-beta.98
 ```
 
 ## Peer dependencies
-- `effect` 4.0.0-beta.85
+- `effect` 4.0.0-beta.98
 
 
 ## Quickstart
@@ -48,7 +48,7 @@ const lens = Lens.fromSubscriptionRef(ref)
 //       ^ Lens.Lens<number[], never, never, never, never>
 
 const value = yield* Lens.get(lens)
-yield* Effect.forkScoped(Stream.runForEach(lens.changes, Console.log))
+yield* Effect.forkScoped(Stream.runForEach(Lens.changes(lens), Console.log))
 yield* Lens.updateEffect(lens, values =>
     Effect.fromOption(Array.replace(values, 1, 1664))
 )
@@ -64,7 +64,7 @@ You can also create Lenses manually using `make` by providing:
 - `get`: an effect that reads the current value,
 - `changes`: a stream of value changes,
 - `commit`: an effectful write primitive,
-- `lock`: an effect that produces the lock used to serialize writes.
+- `lock`: an effect that produces the lock used to serialize writes and preserve atomicity.
 
 You can get pretty creative! Here's an example of a Lens that points to a specific key of the browser `LocalStorage`:
 ```typescript
@@ -100,9 +100,6 @@ const lens = Effect.all([
     Lens.unwrap,
 )
 ```
-
-Note: while Lens supports asynchronous effects for the proxy logic, we would recommend keeping them synchronous to preserve atomicity.
-
 
 ### Focusing
 
@@ -240,41 +237,44 @@ const nameLens = lens.pipe(
 ```
 
 
-### Subscribable
+### View
 
-Effect 4 no longer provides `Subscribable` and `Readable`. This library provides its own `Subscribable` interface, which you can use as a constraint to allow some parts of your app to only read and subscribe to the Lenses you provide them:
+A `View` is a read-only, reactive view of a value: it lets you read the current value and observe subsequent changes. Every `Lens` is also a `View`, which you can use as a constraint to allow some parts of your app to only read and subscribe to the Lenses you provide them. It replaces Effect v3's `Subscribable` module:
 ```typescript
 const ref = yield* SubscriptionRef.make<{
     readonly users: readonly User[]
-}>({ users: [...] })
+}>({ users: [] })
 
-const someFunctionThatShouldOnlyHaveReadonlyAccessToTheState = (
-    usersSub: Subscribable.Subscribable<readonly User[], never, never>
-) => Effect.gen(function*() {
-    // Do whatever
-    const usersCountSub = Subscribable.map(usersSub, a => a.length)
-    const users = yield* usersSub.get
-    yield* Effect.forkScoped(Stream.runForEach(usersSub.changes, ...))
-})
+const logUserCount = (users: View.View<readonly User[]>) =>
+    Effect.gen(function*() {
+        const userCount = View.focusArrayLength(users)
+        yield* Console.log(`There are ${yield* View.get(userCount)} users`)
+        yield* Stream.runForEach(
+            View.changes(userCount),
+            count => Console.log(`There are now ${count} users`),
+        )
+    })
 
-const lens = ref.pipe(
+const usersLens = ref.pipe(
     Lens.fromSubscriptionRef,
     Lens.focusObjectOn("users"),
 )
-yield* someFunctionThatShouldOnlyHaveReadonlyAccessToTheState(lens)
+yield* Effect.forkScoped(logUserCount(usersLens))
 ```
 
+Use `Lens.asView` when you want to make that read-only boundary explicit.
+
 #### Focusing
-This library provides a `Subscribable` module with value and error transforms, recovery (`catch`, `catchCause`, `orElse`, `orElseSucceed`, and `retry`), and transforms to narrow the focus of `Subscribable`'s, same as Lenses:
+Views can be focused in the same way as Lenses. The `View` module also provides value and error transforms, plus recovery (`catch`, `catchCause`, `orElse`, `orElseSucceed`, and `retry`):
 ```typescript
-import { Subscribable } from "effect-lens"
+import { View } from "effect-lens"
 
-declare const sub: Subscribable.Subscribable<readonly { name: string }[], never, never>
+declare const view: View.View<readonly { name: string }[], never, never>
 
-//         \/ Subscribable.Subscribable<string, NoSuchElementError, never>
-const nameSub = sub.pipe(
-    Subscribable.focusArrayAt(1),
-    Subscribable.focusObjectOn("name"),
+//         \/ View.View<string, NoSuchElementError, never>
+const nameView = view.pipe(
+    View.focusArrayAt(1),
+    View.focusObjectOn("name"),
 )
 ```
 

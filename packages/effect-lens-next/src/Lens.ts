@@ -1,25 +1,8 @@
-import {
-    Array,
-    type Cause,
-    Chunk,
-    type Context,
-    Effect,
-    Function,
-    identity,
-    Option,
-    Pipeable,
-    Predicate,
-    PubSub,
-    Ref,
-    Semaphore,
-    Stream,
-    SubscriptionRef,
-    SynchronizedRef,
-} from "effect"
-import * as Subscribable from "./Subscribable.js"
+import { Array, type Cause, Chunk, type Context, Effect, Function, identity, Option, Pipeable, Predicate, PubSub, Ref, Semaphore, Stream, SubscriptionRef, SynchronizedRef } from "effect"
+import * as View from "./View.js"
 
 
-export const LensTypeId: unique symbol = Symbol.for("@effect-fc/Lens/v4/Lens")
+export const LensTypeId: unique symbol = Symbol.for("@effect-lens/Lens/Lens")
 export type LensTypeId = typeof LensTypeId
 
 /**
@@ -29,8 +12,8 @@ export type LensTypeId = typeof LensTypeId
  * 2. a `changes` stream that emits every subsequent update to `A`, and
  * 3. a `modify` effect that can transform the current value.
  */
-export interface Lens<in out A, in out ER = never, in out EW = never, in out RR = never, in out RW = never>
-extends Subscribable.Subscribable<A, ER, RR> {
+export interface Lens<in out A, out ER = never, out EW = never, out RR = never, out RW = never>
+extends View.View<A, ER, RR> {
     readonly [LensTypeId]: LensTypeId
 
     readonly modifyEffect: <B, E1 = never, R1 = never>(
@@ -52,7 +35,7 @@ export const LensImplTypeId: unique symbol = Symbol.for("@effect-fc/Lens/v4/Lens
 export type LensImplTypeId = typeof LensImplTypeId
 
 export declare namespace LensImpl {
-    export interface Resolved<in out A, in out EW = never, in out RW = never> {
+    export interface Resolved<in out A, out EW = never, out RW = never> {
         readonly value: A
         readonly commit: <E = never, R = never>(
             next: Effect.Effect<A, E, R>
@@ -64,9 +47,9 @@ export declare namespace LensImpl {
     }
 }
 
-export abstract class LensImpl<in out A, in out ER = never, in out EW = never, in out RR = never, in out RW = never>
+export abstract class LensImpl<in out A, out ER = never, out EW = never, out RR = never, out RW = never>
 extends Pipeable.Class implements Lens<A, ER, EW, RR, RW> {
-    readonly [Subscribable.SubscribableTypeId]: Subscribable.SubscribableTypeId = Subscribable.SubscribableTypeId
+    readonly [View.ViewTypeId]: View.ViewTypeId = View.ViewTypeId
     readonly [LensTypeId]: LensTypeId = LensTypeId
     readonly [LensImplTypeId]: LensImplTypeId = LensImplTypeId
 
@@ -120,13 +103,13 @@ export const asLensImpl = <A, ER, EW, RR, RW>(
     return lens as LensImpl<A, ER, EW, RR, RW>
 }
 
-export const asSubscribable = <A, ER, EW, RR, RW>(
+export const asView = <A, ER, EW, RR, RW>(
     lens: Lens<A, ER, EW, RR, RW>
-): Subscribable.Subscribable<A, ER, RR> => lens
+): View.View<A, ER, RR> => lens
 
 
 export declare namespace LensLazyImpl {
-    export interface Source<in out A, in out ER = never, in out EW = never, in out RR = never, in out RW = never> {
+    export interface Source<in out A, out ER = never, out EW = never, out RR = never, out RW = never> {
         readonly get: Effect.Effect<A, ER, RR>
         readonly changes: Stream.Stream<A, ER, RR>
         readonly commit: (a: A) => Effect.Effect<void, EW, RW>
@@ -134,7 +117,7 @@ export declare namespace LensLazyImpl {
     }
 }
 
-export class LensLazyImpl<in out A, in out ER = never, in out EW = never, in out RR = never, in out RW = never>
+export class LensLazyImpl<in out A, out ER = never, out EW = never, out RR = never, out RW = never>
 extends LensImpl<A, ER, EW, RR, RW> {
     constructor(
         readonly source: LensLazyImpl.Source<A, ER, EW, RR, RW>,
@@ -163,7 +146,7 @@ export const make = <A, ER, EW, RR, RW>(
 ): Lens<A, ER, EW, RR, RW> => new LensLazyImpl(source)
 
 
-export class UnwrappedLensImpl<in out A, in out ER, in out EW, in out RR, in out RW, in out E1, in out R1>
+export class UnwrappedLensImpl<in out A, out ER, out EW, out RR, out RW, out E1, out R1>
 extends LensImpl<A, ER | E1, EW | E1, RR | R1, RW | R1> {
     constructor(
         readonly effect: Effect.Effect<Lens<A, ER, EW, RR, RW>, E1, R1>
@@ -911,6 +894,11 @@ export const focusOption: {
  * Reads the current value from a `Lens`.
  */
 export const get = <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>): Effect.Effect<A, ER, RR> => self.get
+
+/**
+ * Returns the stream of changes from a `Lens`.
+ */
+export const changes = <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>): Stream.Stream<A, ER, RR> => self.changes
 
 /**
  * Atomically modifies the value of a `Lens` and returns a computed result.

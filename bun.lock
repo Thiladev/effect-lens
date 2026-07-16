@@ -16,7 +16,7 @@
     },
     "packages/effect-lens": {
       "name": "effect-lens",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "devDependencies": {
         "effect": "^3.21.0",
       },
@@ -26,12 +26,12 @@
     },
     "packages/effect-lens-next": {
       "name": "effect-lens-next",
-      "version": "0.1.0-beta.0",
+      "version": "2.0.0-beta.1",
       "devDependencies": {
-        "effect": "4.0.0-beta.85",
+        "effect": "4.0.0-beta.98",
       },
       "peerDependencies": {
-        "effect": "4.0.0-beta.85",
+        "effect": "4.0.0-beta.98",
       },
     },
     "packages/example": {
@@ -185,7 +185,7 @@
 
     "pure-rand": ["pure-rand@6.1.0", "", {}, "sha512-bVWawvoZoBYpp6yIoQtQXHZjmz35RSVHnUOTefl8Vcjr8snTPY1wnpSPMWekcFwbxI6gtmT7rSYPFvz71ldiOA=="],
 
-    "toml": ["toml@4.1.1", "", {}, "sha512-EBJnVBr3dTXdA89WVFoAIPUqkBjxPMwRqsfuo1r240tKFHXv3zgca4+NJib/h6TyvGF7vOawz0jGuryJCdNHrw=="],
+    "toml": ["toml@4.3.0", "", {}, "sha512-lVb8X9BsPVuH0M4BKeS91tXAmJvCjQ5UIyAbQFaxkKGyUFK2RPkhwaFSQH8vbpl1d23eu/IBH+dwVMHWaq9A5A=="],
 
     "turbo": ["turbo@2.9.18", "", { "optionalDependencies": { "@turbo/darwin-64": "2.9.18", "@turbo/darwin-arm64": "2.9.18", "@turbo/linux-64": "2.9.18", "@turbo/linux-arm64": "2.9.18", "@turbo/windows-64": "2.9.18", "@turbo/windows-arm64": "2.9.18" }, "bin": { "turbo": "bin/turbo" } }, "sha512-bwabv6PupzeavybzEoArBAkwq5fnzwf8OFnRtpHwnviFWuwJPFxtyH+aVp36TmIqK3aYYgtTJ3J0m2ysxxSzQg=="],
 
@@ -203,11 +203,13 @@
 
     "@effect/sql/uuid": ["uuid@11.1.1", "", { "bin": { "uuid": "dist/esm/bin/uuid" } }, "sha512-vIYxrBCC/N/K+Js3qSN88go7kIfNPssr/hHCesKCQNAjmgvYS2oqr69kIufEG+O4+PfezOH4EbIeHCfFov8ZgQ=="],
 
-    "effect-lens-next/effect": ["effect@4.0.0-beta.85", "", { "dependencies": { "@standard-schema/spec": "^1.1.0", "fast-check": "^4.8.0", "find-my-way-ts": "^0.1.6", "ini": "^7.0.0", "kubernetes-types": "^1.30.0", "msgpackr": "^2.0.1", "multipasta": "^0.2.7", "toml": "^4.1.1", "uuid": "^14.0.0", "yaml": "^2.9.0" } }, "sha512-Cjv9YQyv4CiIccmRAQIWAoeESCpCpiuHYY8zb5vqiYs3Ac2yE5RQAnKq7z4Ir/3VJYZb8kxh6rS8czDDnpTdkQ=="],
+    "effect-lens-next/effect": ["effect@4.0.0-beta.98", "", { "dependencies": { "@standard-schema/spec": "^1.1.0", "fast-check": "^4.9.0", "find-my-way-ts": "^0.1.6", "ini": "^7.0.0", "kubernetes-types": "^1.30.0", "msgpackr": "^2.0.4", "multipasta": "^0.2.8", "toml": "^4.1.2", "uuid": "^14.0.1", "yaml": "^2.9.0" } }, "sha512-oz+bsG5h+6RNrw4t5GMfQrk/xBS8ROoqkYsuvRhBr5O7mCOrpvH/hbw+QrDzvKIpX4HJClwm86F94c87W0sJxg=="],
 
-    "effect-lens-next/effect/fast-check": ["fast-check@4.8.0", "", { "dependencies": { "pure-rand": "^8.0.0" } }, "sha512-GOJ158CUMnN6cSahsv4+ExARvIDuzzinFjkp0E9WtiBa5zcVeLozVkWaE4IzFcc+Y48Wp1EDlUZsXRyAztQcSg=="],
+    "effect-lens-next/effect/fast-check": ["fast-check@4.9.0", "", { "dependencies": { "pure-rand": "^8.0.0" } }, "sha512-7ms6T7SybUev/PQITciI0yLM2pOSFy5zpG8Ty7tQofcVaQUvrMXp6CBwqF6fThLCLOrfBtuHAtwq6Yu4XPCllg=="],
 
     "effect-lens-next/effect/msgpackr": ["msgpackr@2.0.4", "", { "optionalDependencies": { "msgpackr-extract": "^3.0.4" } }, "sha512-o1C5KRmuRt+apqMr1HuGSqWStZoRBUpEsCsl15uM9VdAF1qHLtvMOU2En747EnTyEl6c4pzPewRMFF31s1CNbA=="],
+
+    "effect-lens-next/effect/multipasta": ["multipasta@0.2.8", "", {}, "sha512-ZPWuMKyv0cSO29f7hozp+k6+crZbQijV8ipMvxNxRf2SwtYGTX1ZX89Kd20VV4H9Znonx+EQn+iy1wGQsJ+b+Q=="],
 
     "effect-lens-next/effect/fast-check/pure-rand": ["pure-rand@8.4.0", "", {}, "sha512-IoM8YF/jY0hiugFo/wOWqfmarlE6J0wc6fDK1PhftMk7MGhVZl88sZimmqBBFomLOCSmcCCpsfj7wXASCpvK9A=="],
   }

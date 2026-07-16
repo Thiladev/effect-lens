@@ -13,7 +13,7 @@ export type LensTypeId = typeof LensTypeId
  * 2. a `changes` stream that emits every subsequent update to `A`, and
  * 3. a `modify` effect that can transform the current value.
  */
-export interface Lens<in out A, in out ER = never, in out EW = never, in out RR = never, in out RW = never>
+export interface Lens<in out A, out ER = never, out EW = never, out RR = never, out RW = never>
 extends Subscribable.Subscribable<A, ER, RR> {
     readonly [LensTypeId]: LensTypeId
 
@@ -32,7 +32,7 @@ export const LensImplTypeId: unique symbol = Symbol.for("@effect-fc/Lens/LensImp
 export type LensImplTypeId = typeof LensImplTypeId
 
 export declare namespace LensImpl {
-    export interface Resolved<in out A, in out EW = never, in out RW = never> {
+    export interface Resolved<in out A, out EW = never, out RW = never> {
         readonly value: A
         readonly commit: <E = never, R = never>(
             next: Effect.Effect<A, E, R>
@@ -44,7 +44,7 @@ export declare namespace LensImpl {
     }
 }
 
-export abstract class LensImpl<in out A, in out ER = never, in out EW = never, in out RR = never, in out RW = never>
+export abstract class LensImpl<in out A, out ER = never, out EW = never, out RR = never, out RW = never>
 extends Pipeable.Class() implements Lens<A, ER, EW, RR, RW> {
     readonly [Readable.TypeId]: Readable.TypeId = Readable.TypeId
     readonly [Subscribable.TypeId]: Subscribable.TypeId = Subscribable.TypeId
@@ -89,7 +89,7 @@ export const asSubscribable = <A, ER, EW, RR, RW>(
 
 
 export declare namespace LensLazyImpl {
-    export interface Source<in out A, in out ER = never, in out EW = never, in out RR = never, in out RW = never> {
+    export interface Source<in out A, out ER = never, out EW = never, out RR = never, out RW = never> {
         readonly get: Effect.Effect<A, ER, RR>
         readonly changes: Stream.Stream<A, ER, RR>
         readonly commit: (a: A) => Effect.Effect<void, EW, RW>
@@ -97,7 +97,7 @@ export declare namespace LensLazyImpl {
     }
 }
 
-export class LensLazyImpl<in out A, in out ER = never, in out EW = never, in out RR = never, in out RW = never>
+export class LensLazyImpl<in out A, out ER = never, out EW = never, out RR = never, out RW = never>
 extends LensImpl<A, ER, EW, RR, RW> {
     constructor(
         readonly source: LensLazyImpl.Source<A, ER, EW, RR, RW>,
@@ -126,7 +126,7 @@ export const make = <A, ER, EW, RR, RW>(
 ): Lens<A, ER, EW, RR, RW> => new LensLazyImpl(source)
 
 
-export class UnwrappedLensImpl<in out A, in out ER, in out EW, in out RR, in out RW, in out E1, in out R1>
+export class UnwrappedLensImpl<in out A, out ER, out EW, out RR, out RW, out E1, out R1>
 extends LensImpl<A, ER | E1, EW | E1, RR | R1, RW | R1> {
     constructor(
         readonly effect: Effect.Effect<Lens<A, ER, EW, RR, RW>, E1, R1>

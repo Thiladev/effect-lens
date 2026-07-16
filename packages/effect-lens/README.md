@@ -2,7 +2,7 @@
 
 A Lens type for [Effect](https://effect.website/) to easily manage nested state.
 
-This version is for Effect v3. For Effect v4, use version 2.X.X-beta.X.
+This version is for Effect v3. For Effect v4, use the [2.0.0 beta](https://www.npmjs.com/package/effect-lens/v/2.0.0-beta.1).
 
 ## Install
 ```
@@ -64,7 +64,7 @@ You can also create Lenses manually using `make` by providing:
 - `get`: an effect that reads the current value,
 - `changes`: a stream of value changes,
 - `commit`: an effectful write primitive,
-- `lock`: an effect that produces the lock used to serialize writes.
+- `lock`: an effect that produces the lock used to serialize writes and preserve atomicity.
 
 You can get pretty creative! Here's an example of a Lens that points to a specific key of the browser `LocalStorage`:
 ```typescript
@@ -100,9 +100,6 @@ const lens = Effect.all([
     Lens.unwrap,
 )
 ```
-
-Note: while Lens supports asynchronous effects for the proxy logic, we would recommend keeping them synchronous to preserve atomicity.
-
 
 ### Focusing
 
@@ -242,30 +239,31 @@ const nameLens = lens.pipe(
 
 ### Subscribable
 
-Lens implements both Effect's `Subscribable` and `Readable`, which you can use as a constraint to allow some parts of your app to only read and subscribe to the Lenses you provide them:
+Effect's `Subscribable` is a read-only, reactive view of a value: it lets you read the current value and observe subsequent changes. Every `Lens` implements both `Subscribable` and `Readable`, which you can use as constraints to allow some parts of your app to only read and subscribe to the Lenses you provide them:
 ```typescript
 const ref = yield* SubscriptionRef.make<{
     readonly users: readonly User[]
-}>({ users: [...] })
+}>({ users: [] })
 
-const someFunctionThatShouldOnlyHaveReadonlyAccessToTheState = (
-    usersSub: Subscribable.Subscribable<readonly User[], never, never>
-) => Effect.gen(function*() {
-    // Do whatever
-    const usersCountSub = Subscribable.map(usersSub, a => a.length)
-    const users = yield* usersSub.get
-    yield* Effect.forkScoped(Stream.runForEach(usersSub.changes, ...))
-})
+const logUserCount = (users: Subscribable.Subscribable<readonly User[]>) =>
+    Effect.gen(function*() {
+        const userCount = Subscribable.focusArrayLength(users)
+        yield* Console.log(`There are ${yield* userCount.get} users`)
+        yield* Stream.runForEach(
+            userCount.changes,
+            count => Console.log(`There are now ${count} users`),
+        )
+    })
 
-const lens = ref.pipe(
+const usersLens = ref.pipe(
     Lens.fromSubscriptionRef,
     Lens.focusObjectOn("users"),
 )
-yield* someFunctionThatShouldOnlyHaveReadonlyAccessToTheState(lens)
+yield* Effect.forkScoped(logUserCount(usersLens))
 ```
 
 #### Focusing
-This library re-exports Effect's `Subscribable` module and adds error transforms and recovery (`catchAll`, `catchAllCause`, `orElse`, `orElseSucceed`, and `retry`), plus transforms to narrow the focus of `Subscribable`'s, same as Lenses:
+Subscribables can be focused in the same way as Lenses. This library re-exports Effect's `Subscribable` module and adds value and error transforms, plus recovery (`catchAll`, `catchAllCause`, `orElse`, `orElseSucceed`, and `retry`):
 ```typescript
 import { Subscribable } from "effect-lens"
 

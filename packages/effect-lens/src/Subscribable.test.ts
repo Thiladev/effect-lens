@@ -71,6 +71,29 @@ describe("Subscribable", () => {
         expect(result).toEqual(["fallback", ["fallback"]])
     })
 
+    test("zipLatestAll combines current values and change streams", async () => {
+        const zipped = Subscribable.zipLatestAll(
+            Subscribable.make({
+                get: Effect.succeed(1),
+                changes: Stream.succeed(2),
+            }),
+            Subscribable.make({
+                get: Effect.succeed("one"),
+                changes: Stream.succeed("two"),
+            }),
+        )
+
+        const result = await Effect.runPromise(Effect.all([
+            zipped.get,
+            Stream.runCollect(zipped.changes),
+        ]))
+
+        expect([result[0], Array.from(result[1])]).toEqual([
+            [1, "one"],
+            [[2, "two"]],
+        ])
+    })
+
     test("focusArrayLength reads the current array length and reflects updates", async () => {
         const result = await Effect.runPromise(
             Effect.flatMap(

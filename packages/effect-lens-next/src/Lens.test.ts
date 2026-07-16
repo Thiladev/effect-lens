@@ -187,7 +187,7 @@ describe("Lens", () => {
         expect(result[1]).toBe(25)
     })
 
-    test("Ref and SynchronizedRef adapters read and update their sources", async () => {
+    test("Ref, SynchronizedRef, and SubscriptionRef adapters read and update their sources", async () => {
         const result = await Effect.runPromise(Effect.gen(function*() {
             const ref = yield* Ref.make(1)
             const refLens = yield* Lens.fromRef(ref)
@@ -195,12 +195,20 @@ describe("Lens", () => {
 
             const synchronizedRef = yield* SynchronizedRef.make(10)
             const synchronizedLens = Lens.fromSynchronizedRef(synchronizedRef)
-            yield* Lens.updateEffect(synchronizedLens, n => Effect.succeed(n + 5))
+            yield* Lens.update(synchronizedLens, n => n + 5)
 
-            return [yield* Ref.get(ref), yield* SynchronizedRef.get(synchronizedRef)] as const
+            const subscriptionRef = yield* SubscriptionRef.make(100)
+            const subscriptionLens = Lens.fromSubscriptionRef(subscriptionRef)
+            yield* Lens.update(subscriptionLens, n => n + 2)
+
+            return [
+                yield* Ref.get(ref),
+                yield* SynchronizedRef.get(synchronizedRef),
+                yield* SubscriptionRef.get(subscriptionRef),
+            ] as const
         }))
 
-        expect(result).toEqual([2, 15])
+        expect(result).toEqual([2, 15, 102])
     })
 
     test("modifyEffect updates are atomic under concurrency", async () => {

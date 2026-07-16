@@ -40,6 +40,41 @@ export const mapOptionEffect: {
     onNone: () => Effect.succeed(Option.none()),
 })))
 
+/**
+ * Allows transforming only the `changes` stream of a `Subscribable`.
+ */
+export const mapStream: {
+    <A, E, R>(
+        f: (changes: Stream.Stream<NoInfer<A>, NoInfer<E>, NoInfer<R>>) => Stream.Stream<NoInfer<A>, NoInfer<E>, NoInfer<R>>,
+    ): (self: Subscribable.Subscribable<A, E, R>) => Subscribable.Subscribable<A, E, R>
+    <A, E, R>(
+        self: Subscribable.Subscribable<A, E, R>,
+        f: (changes: Stream.Stream<NoInfer<A>, NoInfer<E>, NoInfer<R>>) => Stream.Stream<NoInfer<A>, NoInfer<E>, NoInfer<R>>,
+    ): Subscribable.Subscribable<A, E, R>
+} = Function.dual(2, <A, E, R>(
+    self: Subscribable.Subscribable<A, E, R>,
+    f: (changes: Stream.Stream<NoInfer<A>, NoInfer<E>, NoInfer<R>>) => Stream.Stream<NoInfer<A>, NoInfer<E>, NoInfer<R>>,
+): Subscribable.Subscribable<A, E, R> => Subscribable.make({
+    get get() { return self.get },
+    get changes() { return f(self.changes) },
+}))
+
+/**
+ * Combines the current values and streams of changes from multiple `Subscribable` values.
+ */
+export const zipLatestAll = <const T extends readonly Subscribable.Subscribable<any, any, any>[]>(
+    ...elements: T
+): Subscribable.Subscribable<
+    [T[number]] extends [never]
+        ? never
+        : { [K in keyof T]: T[K] extends Subscribable.Subscribable<infer A, infer _E, infer _R> ? A : never },
+    [T[number]] extends [never] ? never : T[number] extends Subscribable.Subscribable<infer _A, infer E, infer _R> ? E : never,
+    [T[number]] extends [never] ? never : T[number] extends Subscribable.Subscribable<infer _A, infer _E, infer R> ? R : never
+> => Subscribable.make({
+    get: Effect.all(elements.map(view => view.get)),
+    changes: Stream.zipLatestAll(...elements.map(view => view.changes)),
+}) as any
+
 
 /**
  * Maps errors from both the current value and the stream of changes.
