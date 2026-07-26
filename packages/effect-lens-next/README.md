@@ -1,16 +1,31 @@
-# Effect Lens
+<p align="center">
+  <img src="./logo-square.svg" alt="Effect Lens — the layered Effect mark under a magnifying lens highlighting code" width="220">
+</p>
 
-A Lens type for [Effect](https://effect.website/) to easily manage nested state.
+<h1 align="center">Effect Lens</h1>
+
+<p align="center">
+  A Lens type for <a href="https://effect.website/">Effect</a> to easily manage nested state.
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/effect-lens/v/beta"><img alt="npm beta version" src="https://img.shields.io/npm/v/effect-lens/beta?style=flat-square&color=6e56cf"></a>
+  <a href="https://www.npmjs.com/package/effect-lens"><img alt="monthly downloads" src="https://img.shields.io/npm/dm/effect-lens?style=flat-square&color=24b8c8"></a>
+  <a href="https://github.com/Thiladev/effect-lens/blob/next/LICENSE"><img alt="MIT license" src="https://img.shields.io/npm/l/effect-lens?style=flat-square&color=8b7bff"></a>
+  <a href="https://effect.website/"><img alt="Effect 4 beta" src="https://img.shields.io/badge/Effect-4.0_beta-b9f27c?style=flat-square&labelColor=263238"></a>
+</p>
+
+> **⚠️ Effect v4 beta:** This version is built for the Effect v4 beta. For Effect v3, use the [stable release](https://www.npmjs.com/package/effect-lens).
 
 ## Install
 ```
-npm install effect-lens@beta effect@4.0.0-beta.98
-yarn add effect-lens@beta effect@4.0.0-beta.98
-bun add effect-lens@beta effect@4.0.0-beta.98
+npm install effect-lens@beta effect@beta
+yarn add effect-lens@beta effect@beta
+bun add effect-lens@beta effect@beta
 ```
 
 ## Peer dependencies
-- `effect` 4.0.0-beta.98
+- `effect` 4.0.0-beta.101
 
 
 ## Quickstart

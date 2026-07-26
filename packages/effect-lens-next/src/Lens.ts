@@ -31,7 +31,7 @@ extends View.View<A, ER, RR> {
 export const isLens = (u: unknown): u is Lens<unknown, unknown, unknown, unknown, unknown> => Predicate.hasProperty(u, LensTypeId)
 
 
-export const LensImplTypeId: unique symbol = Symbol.for("@effect-fc/Lens/v4/LensImpl")
+export const LensImplTypeId: unique symbol = Symbol.for("@effect-lens/Lens/LensImpl")
 export type LensImplTypeId = typeof LensImplTypeId
 
 export declare namespace LensImpl {

@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc" viewBox="0 0 960 320">
+  <title id="title">Effect Lens</title>
+  <desc id="desc">The layered Effect mark beneath a magnifying glass that highlights lines of code.</desc>
+  <defs>
+    <linearGradient id="background" x1="36" y1="24" x2="924" y2="296" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#17152A"/>
+      <stop offset="1" stop-color="#0B1020"/>
+    </linearGradient>
+    <linearGradient id="layer-back" x1="52" y1="112" x2="260" y2="248" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6E56CF"/>
+      <stop offset="1" stop-color="#3B2F86"/>
+    </linearGradient>
+    <linearGradient id="layer-middle" x1="60" y1="80" x2="266" y2="216" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9B7BFF"/>
+      <stop offset="1" stop-color="#5A43BE"/>
+    </linearGradient>
+    <linearGradient id="layer-front" x1="66" y1="54" x2="274" y2="194" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#272442"/>
+      <stop offset="1" stop-color="#17162A"/>
+    </linearGradient>
+    <linearGradient id="lens-ring" x1="122" y1="62" x2="278" y2="242" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#82F7FF"/>
+      <stop offset="0.55" stop-color="#24D6E7"/>
+      <stop offset="1" stop-color="#00A9C0"/>
+    </linearGradient>
+    <linearGradient id="handle" x1="230" y1="204" x2="300" y2="284" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#42E7F2"/>
+      <stop offset="1" stop-color="#8B7BFF"/>
+    </linearGradient>
+    <radialGradient id="lens-glass" cx="0" cy="0" r="1" gradientTransform="translate(166 108) rotate(48) scale(132)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E5FDFF" stop-opacity="0.2"/>
+      <stop offset="0.62" stop-color="#3AE2EE" stop-opacity="0.1"/>
+      <stop offset="1" stop-color="#101529" stop-opacity="0.16"/>
+    </radialGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="170%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#02040C" flood-opacity="0.45"/>
+    </filter>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feFlood flood-color="#38E8F2" flood-opacity="0.34" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="glow"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <clipPath id="lens-clip">
+      <circle cx="190" cy="142" r="67"/>
+    </clipPath>
+  </defs>
+
+  <rect x="8" y="8" width="944" height="304" rx="40" fill="url(#background)"/>
+  <rect x="8.75" y="8.75" width="942.5" height="302.5" rx="39.25" fill="none" stroke="#FFFFFF" stroke-opacity="0.09" stroke-width="1.5"/>
+
+  <g filter="url(#shadow)">
+    <path d="M48 164L154 108L274 173L168 230L48 164Z" fill="url(#layer-back)" stroke="#B7A8FF" stroke-opacity="0.3" stroke-width="2"/>
+    <path d="M48 132L154 76L274 141L168 198L48 132Z" fill="url(#layer-middle)" stroke="#C7BBFF" stroke-opacity="0.45" stroke-width="2"/>
+    <path d="M48 99L154 43L274 108L168 165L48 99Z" fill="url(#layer-front)" stroke="#B9ACFF" stroke-opacity="0.55" stroke-width="2"/>
+  </g>
+
+  <g opacity="0.55" stroke-linecap="round">
+    <path d="M92 92L145 64" stroke="#8B7BFF" stroke-width="7"/>
+    <path d="M105 107L172 72" stroke="#F0ECFF" stroke-width="7"/>
+    <path d="M119 122L156 102" stroke="#5F577F" stroke-width="7"/>
+    <path d="M166 97L211 121" stroke="#5F577F" stroke-width="7"/>
+  </g>
+
+  <g clip-path="url(#lens-clip)">
+    <circle cx="190" cy="142" r="67" fill="#11182C"/>
+    <path d="M126 112L186 80" stroke="#9C8CFF" stroke-width="10" stroke-linecap="round"/>
+    <path d="M136 132L221 87" stroke="#F6F3FF" stroke-width="10" stroke-linecap="round"/>
+    <path d="M147 153L202 124" stroke="#50E5EF" stroke-width="10" stroke-linecap="round"/>
+    <path d="M157 174L225 138" stroke="#B9F27C" stroke-width="10" stroke-linecap="round"/>
+    <path d="M169 195L207 175" stroke="#8B7BFF" stroke-width="10" stroke-linecap="round"/>
+    <circle cx="190" cy="142" r="67" fill="url(#lens-glass)"/>
+    <path d="M145 92C158 81 174 75 191 75" fill="none" stroke="#FFFFFF" stroke-opacity="0.4" stroke-width="5" stroke-linecap="round"/>
+  </g>
+
+  <circle cx="190" cy="142" r="72" fill="none" stroke="#06111D" stroke-opacity="0.85" stroke-width="16"/>
+  <circle cx="190" cy="142" r="73" fill="none" stroke="url(#lens-ring)" stroke-width="9" filter="url(#glow)"/>
+  <path d="M240 196L288 249" fill="none" stroke="#07111D" stroke-width="30" stroke-linecap="round"/>
+  <path d="M240 196L288 249" fill="none" stroke="url(#handle)" stroke-width="19" stroke-linecap="round"/>
+  <path d="M250 207L275 234" fill="none" stroke="#FFFFFF" stroke-opacity="0.3" stroke-width="4" stroke-linecap="round"/>
+
+  <g>
+    <text x="340" y="151" fill="#F7F5FF" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="76" font-weight="760" letter-spacing="-3">effect</text>
+    <text x="559" y="151" fill="#65EAF2" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="76" font-weight="420" letter-spacing="-3">lens</text>
+    <path d="M344 178H850" stroke="#FFFFFF" stroke-opacity="0.11" stroke-width="2"/>
+    <text x="342" y="216" fill="#C7C3D8" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="20" letter-spacing="1.2">FOCUS DEEPER. UPDATE SAFELY.</text>
+    <circle cx="344" cy="254" r="4" fill="#8B7BFF"/>
+    <path d="M358 254H438" stroke="#5B5574" stroke-width="6" stroke-linecap="round"/>
+    <circle cx="458" cy="254" r="4" fill="#50E5EF"/>
+    <path d="M472 254H536" stroke="#5B5574" stroke-width="6" stroke-linecap="round"/>
+    <circle cx="556" cy="254" r="4" fill="#B9F27C"/>
+    <path d="M570 254H686" stroke="#5B5574" stroke-width="6" stroke-linecap="round"/>
+  </g>
+</svg>

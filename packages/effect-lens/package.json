@@ -5,6 +5,7 @@
   "type": "module",
   "files": [
     "./README.md",
+    "./logo-square.svg",
     "./dist"
   ],
   "license": "MIT",

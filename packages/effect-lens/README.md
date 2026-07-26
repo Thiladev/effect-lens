@@ -1,8 +1,21 @@
-# Effect Lens
+<p align="center">
+  <img src="./logo-square.svg" alt="Effect Lens — the layered Effect mark under a magnifying lens highlighting code" width="220">
+</p>
 
-A Lens type for [Effect](https://effect.website/) to easily manage nested state.
+<h1 align="center">Effect Lens</h1>
 
-This version is for Effect v3. For Effect v4, use the [2.0.0 beta](https://www.npmjs.com/package/effect-lens/v/2.0.0-beta.1).
+<p align="center">
+  A Lens type for <a href="https://effect.website/">Effect</a> to easily manage nested state.
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/effect-lens"><img alt="npm version" src="https://img.shields.io/npm/v/effect-lens?style=flat-square&color=6e56cf"></a>
+  <a href="https://www.npmjs.com/package/effect-lens"><img alt="monthly downloads" src="https://img.shields.io/npm/dm/effect-lens?style=flat-square&color=24b8c8"></a>
+  <a href="https://github.com/Thiladev/effect-lens/blob/main/LICENSE"><img alt="MIT license" src="https://img.shields.io/npm/l/effect-lens?style=flat-square&color=8b7bff"></a>
+  <a href="https://effect.website/"><img alt="Effect 3" src="https://img.shields.io/badge/Effect-3.21+-b9f27c?style=flat-square&labelColor=263238"></a>
+</p>
+
+> **⚠️ Effect v3:** This version is built for Effect v3. For Effect v4, use the [beta release](https://www.npmjs.com/package/effect-lens/v/beta).
 
 ## Install
 ```

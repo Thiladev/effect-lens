@@ -13,7 +13,7 @@ export interface View<out A, out E = never, out R = never> extends Pipeable.Pipe
 export const isView = (u: unknown): u is View<unknown, unknown, unknown> => Predicate.hasProperty(u, ViewTypeId)
 
 
-export const ViewImplTypeId: unique symbol = Symbol.for("@effect-fc/Lens/v4/ViewImpl")
+export const ViewImplTypeId: unique symbol = Symbol.for("@effect-lens/Lens/ViewImpl")
 export type ViewImplTypeId = typeof ViewImplTypeId
 
 export declare namespace ViewImpl {
