@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./logo-square.svg" alt="Effect Lens — the layered Effect mark under a magnifying lens highlighting code" width="220">
+  <img src="https://github.com/Thiladev/effect-lens/blob/master/packages/effect-lens-next/logo-square.svg" alt="Effect Lens — the layered Effect mark under a magnifying lens highlighting code" width="220">
 </p>
 
 <h1 align="center">Effect Lens</h1>
