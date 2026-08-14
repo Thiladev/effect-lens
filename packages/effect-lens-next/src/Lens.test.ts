@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Chunk, Context, Effect, Fiber, identity, Option, Ref, Result, Stream, SubscriptionRef, SynchronizedRef } from "effect"
+import { Chunk, Context, Effect, Fiber, identity, Option, Ref, Result, Sink, Stream, SubscriptionRef, SynchronizedRef } from "effect"
 import * as Lens from "./Lens.js"
 
 
@@ -529,6 +529,33 @@ describe("Lens", () => {
         }))
 
         expect(events).toEqual([0, 1])
+    })
+
+    test("toSink sets the lens to every consumed value", async () => {
+        const result = await Effect.runPromise(Effect.gen(function*() {
+            const parent = yield* SubscriptionRef.make(0)
+            const lens = Lens.fromSubscriptionRef(parent)
+            const sink: Sink.Sink<void, number> = Lens.toSink(lens)
+
+            yield* Stream.run(Stream.make(1, 2, 3), sink)
+
+            return yield* SubscriptionRef.get(parent)
+        }))
+
+        expect(result).toBe(3)
+    })
+
+    test("run consumes lens changes through a sink and returns its result", async () => {
+        const lens = Lens.make({
+            get: Effect.succeed(0),
+            changes: Stream.make(1, 2, 3),
+            commit: () => Effect.void,
+            lock: Effect.succeed(identity),
+        })
+
+        const result = await Effect.runPromise(Lens.run(lens, Sink.sum))
+
+        expect(result).toBe(6)
     })
 
     // test("changes stream emits updates when lens mutates state", async () => {

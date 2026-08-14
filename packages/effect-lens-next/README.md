@@ -9,23 +9,23 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/effect-lens/v/beta"><img alt="npm beta version" src="https://img.shields.io/npm/v/effect-lens/beta?style=flat-square&color=6e56cf"></a>
+  <a href="https://www.npmjs.com/package/effect-lens/v/rc"><img alt="npm RC version" src="https://img.shields.io/npm/v/effect-lens/rc?style=flat-square&color=6e56cf"></a>
   <a href="https://www.npmjs.com/package/effect-lens"><img alt="monthly downloads" src="https://img.shields.io/npm/dm/effect-lens?style=flat-square&color=24b8c8"></a>
   <a href="https://github.com/Thiladev/effect-lens/blob/next/LICENSE"><img alt="MIT license" src="https://img.shields.io/npm/l/effect-lens?style=flat-square&color=8b7bff"></a>
-  <a href="https://effect.website/"><img alt="Effect 4 beta" src="https://img.shields.io/badge/Effect-4.0_beta-b9f27c?style=flat-square&labelColor=263238"></a>
+  <a href="https://effect.website/"><img alt="Effect 4 RC" src="https://img.shields.io/badge/Effect-4.0_RC-b9f27c?style=flat-square&labelColor=263238"></a>
 </p>
 
-> **⚠️ Effect v4 beta:** This version is built for the Effect v4 beta. For Effect v3, use the [stable release](https://www.npmjs.com/package/effect-lens).
+> **⚠️ Effect v4 RC:** This version is built for the Effect v4 release candidate. For Effect v3, use the [stable release](https://www.npmjs.com/package/effect-lens).
 
 ## Install
 ```
-npm install effect-lens@beta effect@beta
-yarn add effect-lens@beta effect@beta
-bun add effect-lens@beta effect@beta
+npm install effect-lens@rc effect@rc
+yarn add effect-lens@rc effect@rc
+bun add effect-lens@rc effect@rc
 ```
 
 ## Peer dependencies
-- `effect` 4.0.0-beta.101
+- `effect` 4.0.0-rc.109
 
 
 ## Quickstart
@@ -250,6 +250,36 @@ const nameLens = lens.pipe(
     }),
 )
 ```
+
+
+### Connecting streams, views, and lenses
+
+Use `Lens.toSink` to consume a stream by setting a Lens to every emitted value:
+```typescript
+yield* Stream.make(1, 2, 3).pipe(
+    Stream.run(Lens.toSink(lens)),
+)
+```
+
+Use `Lens.run` or `View.run` to send changes through a Sink. For long-lived sources, run the connection in a scope:
+```typescript
+yield* Effect.forkScoped(
+    sourceLens.pipe(
+        Lens.run(Lens.toSink(targetLens)),
+    ),
+)
+```
+
+Effect's existing stream runners can connect a View to other targets such as a `PubSub`:
+```typescript
+yield* Effect.forkScoped(
+    sourceView.changes.pipe(
+        Stream.runIntoPubSub(pubsub),
+    ),
+)
+```
+
+`View.run` consumes the View's `changes` stream directly and does not perform a separate `get` first. Whether the current value is emitted initially therefore follows the semantics of that View's `changes` stream.
 
 
 ### View

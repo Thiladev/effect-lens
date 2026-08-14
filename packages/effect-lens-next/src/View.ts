@@ -1,4 +1,4 @@
-import { Array, type Cause, Chunk, Effect, Function, Iterable, Option, Pipeable, Predicate, type Result, type Schedule, Stream } from "effect"
+import { Array, type Cause, Chunk, Effect, Function, Iterable, Option, Pipeable, Predicate, type Result, type Schedule, type Sink, Stream } from "effect"
 
 
 export const ViewTypeId: unique symbol = Symbol.for("@effect-lens/View/View")
@@ -290,3 +290,14 @@ export const get = <A, E, R>(self: View<A, E, R>): Effect.Effect<A, E, R> => sel
  * Returns the stream of changes from a `View`.
  */
 export const changes = <A, E, R>(self: View<A, E, R>): Stream.Stream<A, E, R> => self.changes
+
+/**
+ * Runs the stream of changes from a `View` through a `Sink`.
+ */
+export const run: {
+    <A2, A, L, E2, R2>(sink: Sink.Sink<A2, A, L, E2, R2>): <E, R>(self: View<A, E, R>) => Effect.Effect<A2, E | E2, R | R2>
+    <A, E, R, A2, L, E2, R2>(self: View<A, E, R>, sink: Sink.Sink<A2, A, L, E2, R2>): Effect.Effect<A2, E | E2, R | R2>
+} = Function.dual(2, <A, E, R, A2, L, E2, R2>(
+    self: View<A, E, R>,
+    sink: Sink.Sink<A2, A, L, E2, R2>,
+): Effect.Effect<A2, E | E2, R | R2> => Stream.run(self.changes, sink))

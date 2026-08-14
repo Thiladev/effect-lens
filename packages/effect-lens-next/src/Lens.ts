@@ -1,4 +1,4 @@
-import { Array, type Cause, Chunk, type Context, Effect, Function, identity, Option, Pipeable, Predicate, PubSub, Ref, Semaphore, Stream, SubscriptionRef, SynchronizedRef } from "effect"
+import { Array, type Cause, Chunk, type Context, Effect, Function, identity, Option, Pipeable, Predicate, PubSub, Ref, Semaphore, Sink, Stream, SubscriptionRef, SynchronizedRef } from "effect"
 import * as View from "./View.js"
 
 
@@ -901,6 +901,30 @@ export const get = <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>): Effect.Ef
 export const changes = <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>): Stream.Stream<A, ER, RR> => self.changes
 
 /**
+ * Runs the stream of changes from a `Lens` through a `Sink`.
+ */
+export const run: {
+    <A2, A, L, E2, R2>(sink: Sink.Sink<A2, A, L, E2, R2>): <ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<A2, ER | E2, RR | R2>
+    <A, ER, EW, RR, RW, A2, L, E2, R2>(self: Lens<A, ER, EW, RR, RW>, sink: Sink.Sink<A2, A, L, E2, R2>): Effect.Effect<A2, ER | E2, RR | R2>
+} = Function.dual(2, <A, ER, EW, RR, RW, A2, L, E2, R2>(
+    self: Lens<A, ER, EW, RR, RW>,
+    sink: Sink.Sink<A2, A, L, E2, R2>,
+): Effect.Effect<A2, ER | E2, RR | R2> => Stream.run(self.changes, sink))
+
+/**
+ * Converts a `Lens` into a `Sink` that sets the lens to every consumed value.
+ *
+ * Values are written sequentially. Each write uses the lens's normal locking,
+ * read, and commit behavior.
+ */
+export const toSink = <A, ER, EW, RR, RW>(
+    self: Lens<A, ER, EW, RR, RW>
+// biome-ignore lint/suspicious/useIterableCallbackReturn: Sink.forEach callbacks intentionally return an Effect.
+): Sink.Sink<void, A, never, ER | EW, RR | RW> => Sink.forEach(value =>
+    self.modifyEffect(() => Effect.succeed([void 0, value]))
+)
+
+/**
  * Atomically modifies the value of a `Lens` and returns a computed result.
  */
 export const modify: {
@@ -947,7 +971,7 @@ export const set: {
     <A, ER, EW, RR, RW>(value: A): (self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<void, ER | EW, RR | RW>
     <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, value: A): Effect.Effect<void, ER | EW, RR | RW>
 } = Function.dual(2, <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, value: A) =>
-    self.modifyEffect<void, never, never>(() => Effect.succeed([void 0, value] as const)),
+    self.modifyEffect(() => Effect.succeed([void 0, value]))
 )
 
 /**
@@ -957,7 +981,7 @@ export const getAndSet: {
     <A, ER, EW, RR, RW>(value: A): (self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<A, ER | EW, RR | RW>
     <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, value: A): Effect.Effect<A, ER | EW, RR | RW>
 } = Function.dual(2, <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, value: A) =>
-    self.modifyEffect<A, never, never>(a => Effect.succeed([a, value] as const)),
+    self.modifyEffect(a => Effect.succeed([a, value])),
 )
 
 /**
@@ -967,7 +991,7 @@ export const update: {
     <A, ER, EW, RR, RW>(f: (a: A) => A): (self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<void, ER | EW, RR | RW>
     <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => A): Effect.Effect<void, ER | EW, RR | RW>
 } = Function.dual(2, <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => A) =>
-    self.modifyEffect<void, never, never>(a => Effect.succeed([void 0, f(a)] as const)),
+    self.modifyEffect(a => Effect.succeed([void 0, f(a)])),
 )
 
 /**
@@ -977,9 +1001,9 @@ export const updateEffect: {
     <A, ER, EW, RR, RW, E, R>(f: (a: A) => Effect.Effect<A, E, R>): (self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<void, ER | EW | E, RR | RW | R>
     <A, ER, EW, RR, RW, E, R>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => Effect.Effect<A, E, R>): Effect.Effect<void, ER | EW | E, RR | RW | R>
 } = Function.dual(2, <A, ER, EW, RR, RW, E, R>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => Effect.Effect<A, E, R>) =>
-    self.modifyEffect<void, E, R>(a => Effect.flatMap(
+    self.modifyEffect(a => Effect.map(
         f(a),
-        next => Effect.succeed([void 0, next] as const),
+        next => [void 0, next],
     )),
 )
 
@@ -990,7 +1014,7 @@ export const getAndUpdate: {
     <A, ER, EW, RR, RW>(f: (a: A) => A): (self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<A, ER | EW, RR | RW>
     <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => A): Effect.Effect<A, ER | EW, RR | RW>
 } = Function.dual(2, <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => A) =>
-    self.modifyEffect<A, never, never>(a => Effect.succeed([a, f(a)] as const)),
+    self.modifyEffect(a => Effect.succeed([a, f(a)])),
 )
 
 /**
@@ -1000,9 +1024,9 @@ export const getAndUpdateEffect: {
     <A, ER, EW, RR, RW, E, R>(f: (a: A) => Effect.Effect<A, E, R>): (self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<A, ER | EW | E, RR | RW | R>
     <A, ER, EW, RR, RW, E, R>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => Effect.Effect<A, E, R>): Effect.Effect<A, ER | EW | E, RR | RW | R>
 } = Function.dual(2, <A, ER, EW, RR, RW, E, R>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => Effect.Effect<A, E, R>) =>
-    self.modifyEffect<A, E, R>(a => Effect.flatMap(
+    self.modifyEffect(a => Effect.map(
         f(a),
-        next => Effect.succeed([a, next] as const)
+        next => [a, next],
     )),
 )
 
@@ -1013,7 +1037,7 @@ export const getAndUpdateSome: {
     <A>(pf: (a: NoInfer<A>) => Option.Option<NoInfer<A>>): <ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<A, ER | EW, RR | RW>
     <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Option.Option<A>): Effect.Effect<A, ER | EW, RR | RW>
 } = Function.dual(2, <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Option.Option<A>) =>
-    self.modifySomeEffect<A, never, never>(a => Effect.succeed([a, pf(a)] as const)),
+    self.modifySomeEffect(a => Effect.succeed([a, pf(a)])),
 )
 
 /**
@@ -1023,9 +1047,9 @@ export const getAndUpdateSomeEffect: {
     <A, E = never, R = never>(pf: (a: NoInfer<A>) => Effect.Effect<Option.Option<NoInfer<A>>, E, R>): <ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<A, ER | EW | E, RR | RW | R>
     <A, ER, EW, RR, RW, E = never, R = never>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Effect.Effect<Option.Option<A>, E, R>): Effect.Effect<A, ER | EW | E, RR | RW | R>
 } = Function.dual(2, <A, ER, EW, RR, RW, E, R>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Effect.Effect<Option.Option<A>, E, R>) =>
-    self.modifySomeEffect<A, E, R>(a => Effect.map(
+    self.modifySomeEffect(a => Effect.map(
         pf(a),
-        next => [a, next] as const,
+        next => [a, next],
     )),
 )
 
@@ -1036,7 +1060,7 @@ export const setAndGet: {
     <A, ER, EW, RR, RW>(value: A): (self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<A, ER | EW, RR | RW>
     <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, value: A): Effect.Effect<A, ER | EW, RR | RW>
 } = Function.dual(2, <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, value: A) =>
-    self.modifyEffect<A, never, never>(() => Effect.succeed([value, value] as const)),
+    self.modifyEffect(() => Effect.succeed([value, value])),
 )
 
 /**
@@ -1046,9 +1070,9 @@ export const updateAndGet: {
     <A, ER, EW, RR, RW>(f: (a: A) => A): (self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<A, ER | EW, RR | RW>
     <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => A): Effect.Effect<A, ER | EW, RR | RW>
 } = Function.dual(2, <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => A) =>
-    self.modifyEffect<A, never, never>(a => {
+    self.modifyEffect(a => {
         const next = f(a)
-        return Effect.succeed([next, next] as const)
+        return Effect.succeed([next, next])
     }),
 )
 
@@ -1059,9 +1083,9 @@ export const updateAndGetEffect: {
     <A, ER, EW, RR, RW, E, R>(f: (a: A) => Effect.Effect<A, E, R>): (self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<A, ER | EW | E, RR | RW | R>
     <A, ER, EW, RR, RW, E, R>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => Effect.Effect<A, E, R>): Effect.Effect<A, ER | EW | E, RR | RW | R>
 } = Function.dual(2, <A, ER, EW, RR, RW, E, R>(self: Lens<A, ER, EW, RR, RW>, f: (a: A) => Effect.Effect<A, E, R>) =>
-    self.modifyEffect<A, E, R>(a => Effect.flatMap(
+    self.modifyEffect(a => Effect.map(
         f(a),
-        next => Effect.succeed([next, next] as const),
+        next => [next, next],
     )),
 )
 
@@ -1072,7 +1096,7 @@ export const updateSome: {
     <A>(pf: (a: NoInfer<A>) => Option.Option<NoInfer<A>>): <ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<void, ER | EW, RR | RW>
     <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Option.Option<A>): Effect.Effect<void, ER | EW, RR | RW>
 } = Function.dual(2, <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Option.Option<A>) =>
-    self.modifySomeEffect<void, never, never>(a => Effect.succeed([void 0, pf(a)] as const)),
+    self.modifySomeEffect(a => Effect.succeed([void 0, pf(a)])),
 )
 
 /**
@@ -1082,9 +1106,9 @@ export const updateSomeEffect: {
     <A, E = never, R = never>(pf: (a: NoInfer<A>) => Effect.Effect<Option.Option<NoInfer<A>>, E, R>): <ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<void, ER | EW | E, RR | RW | R>
     <A, ER, EW, RR, RW, E = never, R = never>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Effect.Effect<Option.Option<A>, E, R>): Effect.Effect<void, ER | EW | E, RR | RW | R>
 } = Function.dual(2, <A, ER, EW, RR, RW, E, R>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Effect.Effect<Option.Option<A>, E, R>) =>
-    self.modifySomeEffect<void, E, R>(a => Effect.map(
+    self.modifySomeEffect(a => Effect.map(
         pf(a),
-        next => [void 0, next] as const,
+        next => [void 0, next],
     )),
 )
 
@@ -1095,9 +1119,9 @@ export const updateSomeAndGet: {
     <A>(pf: (a: NoInfer<A>) => Option.Option<NoInfer<A>>): <ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>) => Effect.Effect<A, ER | EW, RR | RW>
     <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Option.Option<A>): Effect.Effect<A, ER | EW, RR | RW>
 } = Function.dual(2, <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, pf: (a: A) => Option.Option<A>) =>
-    self.modifySomeEffect<A, never, never>(a => Effect.succeed(Option.match(pf(a), {
-        onNone: () => [a, Option.none()] as const,
-        onSome: next => [next, Option.some(next)] as const,
+    self.modifySomeEffect(a => Effect.succeed(Option.match(pf(a), {
+        onNone: () => [a, Option.none()],
+        onSome: next => [next, Option.some(next)],
     }))),
 )
 
@@ -1111,8 +1135,8 @@ export const updateSomeAndGetEffect: {
     self.modifySomeEffect<A, E, R>(a => Effect.map(
         pf(a),
         next => Option.match(next, {
-            onNone: () => [a, Option.none()] as const,
-            onSome: value => [value, Option.some(value)] as const,
+            onNone: () => [a, Option.none()],
+            onSome: value => [value, Option.some(value)],
         }),
     )),
 )

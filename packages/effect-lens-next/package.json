@@ -1,12 +1,15 @@
 {
   "name": "effect-lens-next",
   "description": "An effectful Lens type to easily manage nested state",
-  "version": "2.0.1-beta.103",
+  "version": "2.0.1-rc.109",
   "type": "module",
   "files": [
     "./README.md",
     "./logo-square.svg",
-    "./dist"
+    "./src/**/*.ts",
+    "./dist/**/*.js",
+    "./dist/**/*.js.map",
+    "./dist/**/*.d.ts"
   ],
   "license": "MIT",
   "repository": {
@@ -37,9 +40,9 @@
     "clean:modules": "rm -rf node_modules"
   },
   "peerDependencies": {
-    "effect": "4.0.0-beta.103"
+    "effect": "4.0.0-rc.109"
   },
   "devDependencies": {
-    "effect": "4.0.0-beta.103"
+    "effect": "4.0.0-rc.109"
   }
 }

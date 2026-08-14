@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Chunk, Effect, Stream, SubscriptionRef } from "effect"
+import { Chunk, Effect, Sink, Stream, SubscriptionRef } from "effect"
 import * as Lens from "./Lens.js"
 import * as View from "./View.js"
 
@@ -93,6 +93,33 @@ describe("View", () => {
             [1, "one"],
             [[2, "two"]],
         ])
+    })
+
+    test("run consumes changes through a sink and returns its result", async () => {
+        const source = View.make({
+            get: Effect.succeed(0),
+            changes: Stream.make(1, 2, 3),
+        })
+
+        const result = await Effect.runPromise(source.pipe(View.run(Sink.sum)))
+
+        expect(result).toBe(6)
+    })
+
+    test("run can pipe a view into a lens", async () => {
+        const result = await Effect.runPromise(Effect.gen(function*() {
+            const target = yield* SubscriptionRef.make(0)
+            const source = View.make({
+                get: Effect.succeed(0),
+                changes: Stream.make(1, 2, 3),
+            })
+
+            yield* source.pipe(View.run(Lens.toSink(Lens.fromSubscriptionRef(target))))
+
+            return yield* SubscriptionRef.get(target)
+        }))
+
+        expect(result).toBe(3)
     })
 
     test("focusArrayLength reads the current array length and reflects updates", async () => {
