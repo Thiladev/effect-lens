@@ -1,4 +1,4 @@
-import { Array, type Cause, Chunk, Effect, Function, Iterable, Option, Pipeable, Predicate, type Result, type Schedule, type Sink, Stream } from "effect"
+import { Array, type Cause, Chunk, Effect, Function, HashMap, Iterable, Option, Pipeable, Predicate, Record, type Result, type Schedule, type Sink, Stream } from "effect"
 
 
 export const ViewTypeId: unique symbol = Symbol.for("@effect-lens/View/View")
@@ -51,6 +51,14 @@ export const asViewImpl = <A, E, R>(
 export const make = <A, E, R>(
     source: ViewImpl.Source<A, E, R>
 ): View<A, E, R> => new ViewImpl(source)
+
+/**
+ * Creates a constant `View` over a fixed value.
+ */
+export const succeed = <A>(value: A): View<A> => make({
+    get: Effect.succeed(value),
+    changes: Stream.make(value),
+})
 
 export const unwrap = <A, E, R, E1, R1>(
     effect: Effect.Effect<View<A, E, R>, E1, R1>,
@@ -236,6 +244,24 @@ export const retry: {
 }))
 
 
+/**
+ * Narrows the focus of a `View` to values matching a predicate or refinement.
+ *
+ * Reading through this `View` fails with `NoSuchElementError` when the current value does not match.
+ */
+export const filter: {
+    <A, B extends A>(refinement: Predicate.Refinement<NoInfer<A>, B>): <E, R>(self: View<A, E, R>) => View<B, E | Cause.NoSuchElementError, R>
+    <A>(predicate: Predicate.Predicate<NoInfer<A>>): <E, R>(self: View<A, E, R>) => View<A, E | Cause.NoSuchElementError, R>
+    <A, E, R, B extends A>(self: View<A, E, R>, refinement: Predicate.Refinement<A, B>): View<B, E | Cause.NoSuchElementError, R>
+    <A, E, R>(self: View<A, E, R>, predicate: Predicate.Predicate<A>): View<A, E | Cause.NoSuchElementError, R>
+} = Function.dual(2, <A, E, R>(
+    self: View<A, E, R>,
+    predicate: Predicate.Predicate<A>,
+): View<A, E | Cause.NoSuchElementError, R> => mapEffect(
+    self,
+    a => Effect.fromOption(Option.liftPredicate(a, predicate)),
+))
+
 /** Narrows the focus to a field of an object. */
 export const focusObjectOn: {
     <A extends object, K extends keyof A>(key: K): <E, R>(self: View<A, E, R>) => View<A[K], E, R>
@@ -276,9 +302,46 @@ export const focusChunkSize = <A, E, R>(
     self: View<Chunk.Chunk<A>, E, R>,
 ): View<number, E, R> => map(self, Chunk.size)
 
+/** Narrows the focus to the value at a key of a `Record`. */
+export const focusRecordAt: {
+    <K extends string | symbol>(key: NoInfer<K>): <A, E, R>(self: View<Record.ReadonlyRecord<K, A>, E, R>) => View<A, E | Cause.NoSuchElementError, R>
+    <K extends string | symbol, A, E, R>(self: View<Record.ReadonlyRecord<K, A>, E, R>, key: NoInfer<K>): View<A, E | Cause.NoSuchElementError, R>
+} = Function.dual(2, <K extends string | symbol, A, E, R>(self: View<Record.ReadonlyRecord<K, A>, E, R>, key: K) =>
+    mapEffect(self, record => Effect.fromOption(Record.get(record, key))),
+)
+
+/** Narrows the focus to the value at a key of a `HashMap`. */
+export const focusHashMapAt: {
+    <K1 extends K, K>(key: K1): <A, E, R>(self: View<HashMap.HashMap<K, A>, E, R>) => View<A, E | Cause.NoSuchElementError, R>
+    <K1 extends K, K, A, E, R>(self: View<HashMap.HashMap<K, A>, E, R>, key: K1): View<A, E | Cause.NoSuchElementError, R>
+} = Function.dual(2, <K, A, E, R>(self: View<HashMap.HashMap<K, A>, E, R>, key: K) =>
+    mapEffect(self, map => Effect.fromOption(HashMap.get(map, key))),
+)
+
 export const focusIterableSize = <A extends Iterable<any>, E, R>(
     self: View<A, E, R>,
 ): View<number, E, R> => map(self, Iterable.size)
+
+/**
+ * Narrows the focus to the value inside an `Option`.
+ *
+ * Reading through this `View` fails with `NoSuchElementError` when the parent option is `None`.
+ */
+export const focusOption = <A, E, R>(
+    self: View<Option.Option<A>, E, R>,
+): View<A, E | Cause.NoSuchElementError, R> => mapEffect(self, Effect.fromOption)
+
+/**
+ * Narrows the focus to the value inside an `Option`, falling back to a default when `None`.
+ *
+ * Unlike `focusOption`, this never fails.
+ */
+export const focusOptionOrElse: {
+    <A>(onNone: () => A): <E, R>(self: View<Option.Option<A>, E, R>) => View<A, E, R>
+    <A, E, R>(self: View<Option.Option<A>, E, R>, onNone: () => A): View<A, E, R>
+} = Function.dual(2, <A, E, R>(self: View<Option.Option<A>, E, R>, onNone: () => A) =>
+    map(self, Option.getOrElse(onNone)),
+)
 
 
 /**

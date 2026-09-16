@@ -1,4 +1,4 @@
-import { Array, type Cause, Chunk, type Context, Effect, Function, identity, Option, Pipeable, Predicate, PubSub, Ref, Semaphore, Sink, Stream, SubscriptionRef, SynchronizedRef } from "effect"
+import { Array, type Cause, Chunk, type Context, Effect, Function, HashMap, identity, Option, Pipeable, Predicate, PubSub, Record, Ref, Semaphore, Sink, Stream, SubscriptionRef, SynchronizedRef } from "effect"
 import * as View from "./View.js"
 
 
@@ -720,6 +720,25 @@ export const provideService: {
 
 
 /**
+ * Narrows the focus of a `Lens` to values matching a predicate or refinement.
+ *
+ * Reading or writing through this `Lens` fails with `NoSuchElementError` when the value does not match.
+ */
+export const filter: {
+    <A, B extends A>(refinement: Predicate.Refinement<NoInfer<A>, B>): <ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>) => Lens<B, ER | Cause.NoSuchElementError, EW | Cause.NoSuchElementError, RR, RW>
+    <A>(predicate: Predicate.Predicate<NoInfer<A>>): <ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>) => Lens<A, ER | Cause.NoSuchElementError, EW | Cause.NoSuchElementError, RR, RW>
+    <A, ER, EW, RR, RW, B extends A>(self: Lens<A, ER, EW, RR, RW>, refinement: Predicate.Refinement<A, B>): Lens<B, ER | Cause.NoSuchElementError, EW | Cause.NoSuchElementError, RR, RW>
+    <A, ER, EW, RR, RW>(self: Lens<A, ER, EW, RR, RW>, predicate: Predicate.Predicate<A>): Lens<A, ER | Cause.NoSuchElementError, EW | Cause.NoSuchElementError, RR, RW>
+} = Function.dual(2, <A, ER, EW, RR, RW>(
+    self: Lens<A, ER, EW, RR, RW>,
+    predicate: Predicate.Predicate<A>,
+): Lens<A, ER | Cause.NoSuchElementError, EW | Cause.NoSuchElementError, RR, RW> => mapEffect(
+    self,
+    a => Effect.fromOption(Option.liftPredicate(a, predicate)),
+    (_a, b) => Effect.fromOption(Option.liftPredicate(b, predicate)),
+))
+
+/**
  * Narrows the focus to a field of an object. Replaces the object in an immutable fashion when written to.
  */
 export const focusObjectOn: {
@@ -872,6 +891,75 @@ export const focusChunkAt: {
 )
 
 /**
+ * Narrows the focus to the value at a key of a `Record`. Replaces the parent record immutably when written to.
+ *
+ * Reading or writing through this `Lens` fails with `NoSuchElementError` when the key is not present.
+ */
+export const focusRecordAt: {
+    <K extends string | symbol>(
+        key: NoInfer<K>
+    ): <A, ER, EW, RR, RW>(self: Lens<Record.ReadonlyRecord<K, A>, ER, EW, RR, RW>) => Lens<A, ER | Cause.NoSuchElementError, EW | Cause.NoSuchElementError, RR, RW>
+    <K extends string | symbol, A, ER, EW, RR, RW>(
+        self: Lens<Record.ReadonlyRecord<K, A>, ER, EW, RR, RW>,
+        key: NoInfer<K>,
+    ): Lens<A, ER | Cause.NoSuchElementError, EW | Cause.NoSuchElementError, RR, RW>
+} = Function.dual(2, <K extends string | symbol, A, ER, EW, RR, RW>(
+    self: Lens<Record.ReadonlyRecord<K, A>, ER, EW, RR, RW>,
+    key: K,
+): Lens<A, ER | Cause.NoSuchElementError, EW | Cause.NoSuchElementError, RR, RW> => mapEffect(
+    self,
+    record => Effect.fromOption(Record.get(record, key)),
+    (record, value) => Effect.fromOption(Record.replace(record, key, value)),
+))
+
+/**
+ * Narrows the focus to the value at a key of a mutable `Record`. Mutates the parent record in place when written to.
+ *
+ * Reading or writing through this `Lens` fails with `NoSuchElementError` when the key is not present.
+ */
+export const focusMutableRecordAt: {
+    <K extends string | symbol>(
+        key: NoInfer<K>
+    ): <A, ER, EW, RR, RW>(self: Lens<{ [P in K]: A }, ER, EW, RR, RW>) => Lens<A, ER | Cause.NoSuchElementError, EW | Cause.NoSuchElementError, RR, RW>
+    <K extends string | symbol, A, ER, EW, RR, RW>(
+        self: Lens<{ [P in K]: A }, ER, EW, RR, RW>,
+        key: NoInfer<K>,
+    ): Lens<A, ER | Cause.NoSuchElementError, EW | Cause.NoSuchElementError, RR, RW>
+} = Function.dual(2, <K extends string | symbol, A, ER, EW, RR, RW>(
+    self: Lens<{ [P in K]: A }, ER, EW, RR, RW>,
+    key: K,
+): Lens<A, ER | Cause.NoSuchElementError, EW | Cause.NoSuchElementError, RR, RW> => mapEffect(
+    self,
+    record => Effect.fromOption(Record.get(record, key)),
+    (record, value) => Effect.flatMap(
+        Effect.fromOption(Record.get(record, key)),
+        () => Effect.as(Effect.sync(() => { record[key] = value }), record),
+    ),
+))
+
+/**
+ * Narrows the focus to the value at a key of a `HashMap`. Replaces the parent map immutably when written to.
+ *
+ * Reading or writing through this `Lens` fails with `NoSuchElementError` when the key is not present.
+ */
+export const focusHashMapAt: {
+    <K1 extends K, K>(
+        key: K1
+    ): <A, ER, EW, RR, RW>(self: Lens<HashMap.HashMap<K, A>, ER, EW, RR, RW>) => Lens<A, ER | Cause.NoSuchElementError, EW | Cause.NoSuchElementError, RR, RW>
+    <K1 extends K, K, A, ER, EW, RR, RW>(
+        self: Lens<HashMap.HashMap<K, A>, ER, EW, RR, RW>,
+        key: K1,
+    ): Lens<A, ER | Cause.NoSuchElementError, EW | Cause.NoSuchElementError, RR, RW>
+} = Function.dual(2, <K, A, ER, EW, RR, RW>(
+    self: Lens<HashMap.HashMap<K, A>, ER, EW, RR, RW>,
+    key: K,
+): Lens<A, ER | Cause.NoSuchElementError, EW | Cause.NoSuchElementError, RR, RW> => mapEffect(
+    self,
+    map => Effect.fromOption(HashMap.get(map, key)),
+    (map, value) => Effect.fromOption(Option.map(HashMap.get(map, key), () => HashMap.set(map, key, value))),
+))
+
+/**
  * Narrows the focus to the value inside an `Option`.
  *
  * Reading or writing through this lens fails with `NoSuchElementError` when the parent option is `None`.
@@ -888,6 +976,29 @@ export const focusOption: {
     Effect.fromOption,
     (option, value) => Effect.as(Effect.fromOption(option), Option.some(value)),
 )
+
+/**
+ * Narrows the focus to the value inside an `Option`, falling back to a default when `None`.
+ *
+ * Unlike `focusOption`, this never fails: reading returns the default on `None`, and writing
+ * always wraps the new focused value back into `Option.some`.
+ */
+export const focusOptionOrElse: {
+    <A>(
+        onNone: () => A,
+    ): <ER, EW, RR, RW>(self: Lens<Option.Option<A>, ER, EW, RR, RW>) => Lens<A, ER, EW, RR, RW>
+    <A, ER, EW, RR, RW>(
+        self: Lens<Option.Option<A>, ER, EW, RR, RW>,
+        onNone: () => A,
+    ): Lens<A, ER, EW, RR, RW>
+} = Function.dual(2, <A, ER, EW, RR, RW>(
+    self: Lens<Option.Option<A>, ER, EW, RR, RW>,
+    onNone: () => A,
+): Lens<A, ER, EW, RR, RW> => map(
+    self,
+    Option.getOrElse(onNone),
+    (_option, value) => Option.some(value),
+))
 
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Chunk, Context, Effect, Fiber, identity, Option, Ref, Result, Sink, Stream, SubscriptionRef, SynchronizedRef } from "effect"
+import { Chunk, Context, Effect, Fiber, HashMap, identity, Option, Ref, Result, Sink, Stream, SubscriptionRef, SynchronizedRef } from "effect"
 import * as Lens from "./Lens.js"
 
 
@@ -390,6 +390,127 @@ describe("Lens", () => {
         expect(Chunk.toReadonlyArray(updated)).toEqual([1, 2, 99])
     })
 
+    test("focusRecordAt reads and writes the value at an existing key", async () => {
+        const result = await Effect.runPromise(
+            Effect.flatMap(
+                SubscriptionRef.make<Record<string, number>>({ a: 1, b: 2 }),
+                parent => {
+                    const lens = Lens.focusRecordAt(Lens.fromSubscriptionRef(parent), "a")
+                    return Effect.flatMap(
+                        Lens.get(lens),
+                        initial => Effect.flatMap(
+                            Lens.set(lens, 99),
+                            () => Effect.map(SubscriptionRef.get(parent), parentValue => [initial, parentValue] as const),
+                        ),
+                    )
+                },
+            ),
+        )
+
+        expect(result[0]).toBe(1)
+        expect(result[1]).toEqual({ a: 99, b: 2 })
+    })
+
+    test("focusRecordAt fails when the key is not present", async () => {
+        const result = await Effect.runPromise(
+            Effect.flatMap(
+                SubscriptionRef.make<Record<string, number>>({ a: 1 }),
+                parent => {
+                    const lens = Lens.focusRecordAt(Lens.fromSubscriptionRef(parent), "missing")
+                    return Effect.all([
+                        Effect.result(Lens.get(lens)),
+                        Effect.result(Lens.set(lens, 99)),
+                        SubscriptionRef.get(parent),
+                    ] as const)
+                },
+            ),
+        )
+
+        expect(result[0]._tag).toBe("Failure")
+        expect(result[1]._tag).toBe("Failure")
+        expect(result[2]).toEqual({ a: 1 })
+    })
+
+    test("focusMutableRecordAt mutates the record reference in place", async () => {
+        const original: Record<string, number> = { a: 1, b: 2 }
+        const updated = await Effect.runPromise(
+            Effect.flatMap(
+                SubscriptionRef.make(original),
+                parent => {
+                    const lens = Lens.focusMutableRecordAt(Lens.fromSubscriptionRef(parent), "a")
+                    return Effect.flatMap(
+                        Lens.set(lens, 99),
+                        () => SubscriptionRef.get(parent),
+                    )
+                },
+            ),
+        )
+
+        expect(updated).toBe(original)
+        expect(updated).toEqual({ a: 99, b: 2 })
+    })
+
+    test("focusMutableRecordAt fails when the key is not present", async () => {
+        const result = await Effect.runPromise(
+            Effect.flatMap(
+                SubscriptionRef.make<Record<string, number>>({ a: 1 }),
+                parent => {
+                    const lens = Lens.focusMutableRecordAt(Lens.fromSubscriptionRef(parent), "missing")
+                    return Effect.all([
+                        Effect.result(Lens.get(lens)),
+                        Effect.result(Lens.set(lens, 99)),
+                        SubscriptionRef.get(parent),
+                    ] as const)
+                },
+            ),
+        )
+
+        expect(result[0]._tag).toBe("Failure")
+        expect(result[1]._tag).toBe("Failure")
+        expect(result[2]).toEqual({ a: 1 })
+    })
+
+    test("focusHashMapAt reads and writes the value at an existing key", async () => {
+        const result = await Effect.runPromise(
+            Effect.flatMap(
+                SubscriptionRef.make<HashMap.HashMap<string, number>>(HashMap.make(["a", 1], ["b", 2])),
+                parent => {
+                    const lens = Lens.focusHashMapAt(Lens.fromSubscriptionRef(parent), "a")
+                    return Effect.flatMap(
+                        Lens.get(lens),
+                        initial => Effect.flatMap(
+                            Lens.set(lens, 99),
+                            () => Effect.map(SubscriptionRef.get(parent), parentValue => [initial, parentValue] as const),
+                        ),
+                    )
+                },
+            ),
+        )
+
+        expect(result[0]).toBe(1)
+        expect(HashMap.toValues(result[1])).toEqual([99, 2])
+    })
+
+    test("focusHashMapAt fails when the key is not present", async () => {
+        const result = await Effect.runPromise(
+            Effect.flatMap(
+                SubscriptionRef.make<HashMap.HashMap<string, number>>(HashMap.make(["a", 1])),
+                parent => {
+                    const lens = Lens.focusHashMapAt(Lens.fromSubscriptionRef(parent), "missing")
+                    return Effect.all([
+                        Effect.result(Lens.get(lens)),
+                        Effect.result(Lens.set(lens, 99)),
+                        SubscriptionRef.get(parent),
+                    ] as const)
+                },
+            ),
+        )
+
+        expect(result[0]._tag).toBe("Failure")
+        expect(result[1]._tag).toBe("Failure")
+        expect(HashMap.toValues(result[2])).toEqual([1])
+    })
+
     test("focusOption reads and writes the inner Some value", async () => {
         const result = await Effect.runPromise(
             Effect.flatMap(
@@ -429,6 +550,59 @@ describe("Lens", () => {
         expect(result[0]._tag).toBe("Failure")
         expect(result[1]._tag).toBe("Failure")
         expect(result[2]).toEqual(Option.none())
+    })
+
+    test("focusOptionOrElse reads the default and writes back Some on None", async () => {
+        const result = await Effect.runPromise(
+            Effect.flatMap(
+                SubscriptionRef.make<Option.Option<number>>(Option.none()),
+                parent => {
+                    const lens = Lens.focusOptionOrElse(Lens.fromSubscriptionRef(parent), () => -1)
+                    return Effect.flatMap(
+                        Lens.get(lens),
+                        initial => Effect.flatMap(
+                            Lens.set(lens, 100),
+                            () => Effect.map(SubscriptionRef.get(parent), parentValue => [initial, parentValue] as const),
+                        ),
+                    )
+                },
+            ),
+        )
+
+        expect(result[0]).toBe(-1)
+        expect(result[1]).toEqual(Option.some(100))
+    })
+
+    test("focusOptionOrElse reads through Some without using the default", async () => {
+        const result = await Effect.runPromise(
+            Effect.flatMap(
+                SubscriptionRef.make<Option.Option<number>>(Option.some(42)),
+                parent => Lens.get(Lens.focusOptionOrElse(Lens.fromSubscriptionRef(parent), () => -1)),
+            ),
+        )
+
+        expect(result).toBe(42)
+    })
+
+    test("filter narrows the focus and fails when the predicate does not match", async () => {
+        const result = await Effect.runPromise(
+            Effect.flatMap(
+                SubscriptionRef.make(1),
+                parent => {
+                    const lens = Lens.filter(Lens.fromSubscriptionRef(parent), (n: number) => n > 0)
+                    return Effect.all([
+                        Lens.get(lens),
+                        Lens.set(lens, 5),
+                        Effect.result(Lens.set(lens, -1)),
+                        SubscriptionRef.get(parent),
+                    ] as const)
+                },
+            ),
+        )
+
+        expect(result[0]).toBe(1)
+        expect(result[2]._tag).toBe("Failure")
+        expect(result[3]).toBe(5)
     })
 
     test("modify and modifyEffect atomically update and return a result", async () => {

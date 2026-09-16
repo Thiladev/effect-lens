@@ -25,7 +25,7 @@ bun add effect-lens@rc effect@rc
 ```
 
 ## Peer dependencies
-- `effect` 4.0.0-rc.109
+- `effect` 4.0.0-rc.115
 
 
 ## Quickstart
@@ -178,6 +178,7 @@ yield* Lens.set(
 Currently available:
 | Name | Description | Parent state mutation behavior | Notes |
 | - | - | - | - |
+| `filter` | Narrows the focus to values matching a predicate or refinement | Immutable | Reading or writing fails with `NoSuchElementError` when the value does not match |
 | `focusObjectOn` | Focuses to a field of an object. Replaces the parent object immutably when writing to the focused field | Immutable | |
 | `focusObjectOnWritable` | Focuses to a writable field of an object. Mutates the parent object in place via the writable field | Mutable | Type-safe: will not allow you to mutate `readonly` fields |
 | `focusArrayAt` | Focuses to an indexed entry of an array. Replaces the parent array immutably when writing to the focused index | Immutable | |
@@ -185,7 +186,11 @@ Currently available:
 | `focusTupleAt` | Focuses to an indexed entry of a readonly tuple. Replaces the parent tuple immutably when writing to the focused index | Immutable | |
 | `focusMutableTupleAt` | Focuses to an indexed entry of a mutable tuple. Mutates the parent tuple in place at the focused index | Mutable | Type-safe: will not allow you to mutate `readonly` tuples |
 | `focusChunkAt` | Focuses to an indexed entry of a `Chunk`. Replaces the parent `Chunk` immutably when writing to the focused element | Immutable | |
+| `focusRecordAt` | Focuses to the value at a key of a `Record`. Replaces the parent record immutably when writing to the focused key | Immutable | Reading or writing fails with `NoSuchElementError` when the key is not present |
+| `focusMutableRecordAt` | Focuses to the value at a key of a `Record`. Mutates the parent record in place when writing to the focused key | Mutable | Reading or writing fails with `NoSuchElementError` when the key is not present |
+| `focusHashMapAt` | Focuses to the value at a key of a `HashMap`. Replaces the parent map immutably when writing to the focused key | Immutable | Reading or writing fails with `NoSuchElementError` when the key is not present |
 | `focusOption` | Focuses to the value inside an `Option`. Wraps writes back into `Option.some` | Immutable | Reading or writing fails with `NoSuchElementError` when the parent option is `None` |
+| `focusOptionOrElse` | Focuses to the value inside an `Option`, falling back to a default. Wraps writes back into `Option.some` | Immutable | Never fails, unlike `focusOption` |
 
 #### Manually
 You can create focused Lenses by composing them manually using `map`, `mapEffect` and `unwrap`:
@@ -326,6 +331,7 @@ const nameView = view.pipe(
 Currently available:
 | Name | Description |
 | - | - |
+| `filter` | Narrows the focus to values matching a predicate or refinement. Fails with `NoSuchElementError` when the value does not match |
 | `focusObjectOn` | Focuses to the field of an object |
 | `focusArrayAt` | Focuses to an indexed entry of an array |
 | `focusArrayLength` | Focuses to the length of an array |
@@ -333,3 +339,7 @@ Currently available:
 | `focusChunkAt` | Focuses to an indexed entry of a `Chunk` |
 | `focusChunkSize` | Focuses to the size of a `Chunk` |
 | `focusIterableSize` | Focuses to the size of an iterable |
+| `focusRecordAt` | Focuses to the value at a key of a `Record`. Fails with `NoSuchElementError` when the key is not present |
+| `focusHashMapAt` | Focuses to the value at a key of a `HashMap`. Fails with `NoSuchElementError` when the key is not present |
+| `focusOption` | Focuses to the value inside an `Option`. Fails with `NoSuchElementError` when the option is `None` |
+| `focusOptionOrElse` | Focuses to the value inside an `Option`, falling back to a default. Never fails, unlike `focusOption` |
