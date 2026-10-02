@@ -15,7 +15,7 @@
   <a href="https://effect.website/"><img alt="Effect 4" src="https://img.shields.io/badge/Effect-4.0-b9f27c?style=flat-square&labelColor=263238"></a>
 </p>
 
-> **⚠️ Effect v4:** This version is built for Effect v4. For Effect v3, use the [legacy release](https://www.npmjs.com/package/effect-lens/v/0.2.3) (`effect-lens@^0.2.3`).
+> **⚠️ Effect v4:** This version is built for Effect v4. For Effect v3, use the [legacy release](https://www.npmjs.com/package/effect-lens/v/legacy) (`effect-lens@legacy`).
 
 ## Install
 ```

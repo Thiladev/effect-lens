@@ -19,9 +19,9 @@
 
 ## Install
 ```
-npm install effect-lens@^0.2.3 effect@^3
-yarn add effect-lens@^0.2.3 effect@^3
-bun add effect-lens@^0.2.3 effect@^3
+npm install effect-lens@legacy effect@^3
+yarn add effect-lens@legacy effect@^3
+bun add effect-lens@legacy effect@^3
 ```
 
 ## Peer dependencies
