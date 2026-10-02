@@ -23,7 +23,7 @@ jobs:
         run: bun lint:biome
       - name: Test
         run: bun test
-      - name: Publish effect-lens (Effect v4, tag: latest)
+      - name: "Publish effect-lens (Effect v4, tag: latest)"
         uses: JS-DevTools/npm-publish@v4
         with:
           package: packages/effect-lens
@@ -33,7 +33,7 @@ jobs:
           registry: https://registry.npmjs.org
       - name: Prepare effect-lens-legacy (publish as effect-lens)
         run: npm pkg set name=effect-lens --prefix packages/effect-lens-legacy
-      - name: Publish effect-lens (Effect v3, tag: legacy)
+      - name: "Publish effect-lens (Effect v3, tag: legacy)"
         uses: JS-DevTools/npm-publish@v4
         with:
           package: packages/effect-lens-legacy
