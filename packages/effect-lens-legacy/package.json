@@ -1,15 +1,12 @@
 {
-  "name": "effect-lens-next",
+  "name": "effect-lens-legacy",
   "description": "An effectful Lens type to easily manage nested state",
-  "version": "2.0.2-rc.115",
+  "version": "0.2.4",
   "type": "module",
   "files": [
     "./README.md",
     "./logo-square.svg",
-    "./src/**/*.ts",
-    "./dist/**/*.js",
-    "./dist/**/*.js.map",
-    "./dist/**/*.d.ts"
+    "./dist"
   ],
   "license": "MIT",
   "repository": {
@@ -25,9 +22,9 @@
       "types": "./dist/Lens.d.ts",
       "default": "./dist/Lens.js"
     },
-    "./View": {
-      "types": "./dist/View.d.ts",
-      "default": "./dist/View.js"
+    "./Subscribable": {
+      "types": "./dist/Subscribable.d.ts",
+      "default": "./dist/Subscribable.js"
     }
   },
   "scripts": {
@@ -40,9 +37,9 @@
     "clean:modules": "rm -rf node_modules"
   },
   "peerDependencies": {
-    "effect": "4.0.0-rc.115"
+    "effect": "^3.21.0"
   },
   "devDependencies": {
-    "effect": "4.0.0-rc.115"
+    "effect": "^3.21.0"
   }
 }

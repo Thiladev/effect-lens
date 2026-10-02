@@ -1,5 +1,4 @@
 {
-  "$schema": "../../node_modules/@effect/tsgo/schema.json",
   "compilerOptions": {
     // Enable latest features
     "lib": ["ESNext", "DOM"],
@@ -36,5 +35,5 @@
     ]
   },
 
-  "include": ["./src"]
+  "include": ["./src"],
 }

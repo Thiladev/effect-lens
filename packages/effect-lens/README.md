@@ -11,21 +11,21 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/effect-lens"><img alt="npm version" src="https://img.shields.io/npm/v/effect-lens?style=flat-square&color=6e56cf"></a>
   <a href="https://www.npmjs.com/package/effect-lens"><img alt="monthly downloads" src="https://img.shields.io/npm/dm/effect-lens?style=flat-square&color=24b8c8"></a>
-  <a href="https://github.com/Thiladev/effect-lens/blob/main/LICENSE"><img alt="MIT license" src="https://img.shields.io/npm/l/effect-lens?style=flat-square&color=8b7bff"></a>
-  <a href="https://effect.website/"><img alt="Effect 3" src="https://img.shields.io/badge/Effect-3.21+-b9f27c?style=flat-square&labelColor=263238"></a>
+  <a href="https://github.com/Thiladev/effect-lens/blob/master/LICENSE"><img alt="MIT license" src="https://img.shields.io/npm/l/effect-lens?style=flat-square&color=8b7bff"></a>
+  <a href="https://effect.website/"><img alt="Effect 4" src="https://img.shields.io/badge/Effect-4.0-b9f27c?style=flat-square&labelColor=263238"></a>
 </p>
 
-> **⚠️ Effect v3:** This version is built for Effect v3. For Effect v4, use the [beta release](https://www.npmjs.com/package/effect-lens/v/beta).
+> **⚠️ Effect v4:** This version is built for Effect v4. For Effect v3, use the [legacy release](https://www.npmjs.com/package/effect-lens/v/0.2.3) (`effect-lens@^0.2.3`).
 
 ## Install
 ```
-npm install effect-lens
-yarn add effect-lens
-bun add effect-lens
+npm install effect-lens effect
+yarn add effect-lens effect
+bun add effect-lens effect
 ```
 
 ## Peer dependencies
-- `effect` 3.21+
+- `effect` ^4.0.0
 
 
 ## Quickstart
@@ -63,8 +63,10 @@ const lens = Lens.fromSubscriptionRef(ref)
 //       ^ Lens.Lens<number[], never, never, never, never>
 
 const value = yield* Lens.get(lens)
-yield* Effect.forkScoped(Stream.runForEach(lens.changes, Console.log))
-yield* Lens.update(lens, Array.replace(1, 1664))
+yield* Effect.forkScoped(Stream.runForEach(Lens.changes(lens), Console.log))
+yield* Lens.updateEffect(lens, values =>
+    Effect.fromOption(Array.replace(values, 1, 1664))
+)
 ```
 
 Currently available:
@@ -85,7 +87,7 @@ You can get pretty creative! Here's an example of a Lens that points to a specif
 const lens = Effect.all([
     KeyValueStore.KeyValueStore,
     Effect.succeed("someKey"),
-    Effect.makeSemaphore(1),
+    Semaphore.make(1),
 ]).pipe(
     Effect.map(([kv, key, semaphore]) => Lens.make({
         get: kv.get(key),
@@ -147,19 +149,19 @@ const ref = yield* SubscriptionRef.make<{
     readonly users: readonly User[]
 }>({
     users: [
-        { name: "Jean Dupont", age: yield* DateTime.make("03/25/1969") },
-        { name: "Juan Joya Borja", age: yield* DateTime.make("04/05/1956") },
-        { name: "Benzemonstre", age: yield* DateTime.make("06/12/2000") },
+        { name: "Jean Dupont", age: yield* Effect.fromOption(DateTime.make("03/25/1969")) },
+        { name: "Juan Joya Borja", age: yield* Effect.fromOption(DateTime.make("04/05/1956")) },
+        { name: "Benzemonstre", age: yield* Effect.fromOption(DateTime.make("06/12/2000")) },
     ]
 })
 
-//                \/ Lens<User, NoSuchElementException, NoSuchElementException, never, never>
+//                \/ Lens<User, NoSuchElementError, NoSuchElementError, never, never>
 const jeanDupontLens = ref.pipe(
     Lens.fromSubscriptionRef,     // Creates a lens that proxies the ref
     Lens.focusObjectOn("users"),  // Creates a focused lens that points to the users field
     Lens.focusArrayAt(0),         // Creates a focused lens that points to the first entry of the user array
 )
-// Reading or writing from this lens can fail with NoSuchElementException
+// Reading or writing from this lens can fail with NoSuchElementError
 // This is because of Lens.focusArrayAt(0), as reading and writing to an array is an unsafe operation
 
 const jeanDupont = yield* Lens.get(jeanDupontLens)
@@ -167,7 +169,7 @@ const jeanDupont = yield* Lens.get(jeanDupontLens)
 yield* Lens.set(
     // You can focus even further down
     Lens.focusObjectOn(jeanDupontLens, "age"),
-    yield* DateTime.make("03/25/1970"),
+    yield* Effect.fromOption(DateTime.make("03/25/1970")),
 )
 // Mutations with the parent state are performed immutably by default
 // unless you use a specific mutable transform such as 'focusObjectOnWritable'
@@ -176,6 +178,7 @@ yield* Lens.set(
 Currently available:
 | Name | Description | Parent state mutation behavior | Notes |
 | - | - | - | - |
+| `filter` | Narrows the focus to values matching a predicate or refinement | Immutable | Reading or writing fails with `NoSuchElementError` when the value does not match |
 | `focusObjectOn` | Focuses to a field of an object. Replaces the parent object immutably when writing to the focused field | Immutable | |
 | `focusObjectOnWritable` | Focuses to a writable field of an object. Mutates the parent object in place via the writable field | Mutable | Type-safe: will not allow you to mutate `readonly` fields |
 | `focusArrayAt` | Focuses to an indexed entry of an array. Replaces the parent array immutably when writing to the focused index | Immutable | |
@@ -183,33 +186,37 @@ Currently available:
 | `focusTupleAt` | Focuses to an indexed entry of a readonly tuple. Replaces the parent tuple immutably when writing to the focused index | Immutable | |
 | `focusMutableTupleAt` | Focuses to an indexed entry of a mutable tuple. Mutates the parent tuple in place at the focused index | Mutable | Type-safe: will not allow you to mutate `readonly` tuples |
 | `focusChunkAt` | Focuses to an indexed entry of a `Chunk`. Replaces the parent `Chunk` immutably when writing to the focused element | Immutable | |
-| `focusOption` | Focuses to the value inside an `Option`. Wraps writes back into `Option.some` | Immutable | Reading or writing fails with `NoSuchElementException` when the parent option is `None` |
+| `focusRecordAt` | Focuses to the value at a key of a `Record`. Replaces the parent record immutably when writing to the focused key | Immutable | Reading or writing fails with `NoSuchElementError` when the key is not present |
+| `focusMutableRecordAt` | Focuses to the value at a key of a `Record`. Mutates the parent record in place when writing to the focused key | Mutable | Reading or writing fails with `NoSuchElementError` when the key is not present |
+| `focusHashMapAt` | Focuses to the value at a key of a `HashMap`. Replaces the parent map immutably when writing to the focused key | Immutable | Reading or writing fails with `NoSuchElementError` when the key is not present |
+| `focusOption` | Focuses to the value inside an `Option`. Wraps writes back into `Option.some` | Immutable | Reading or writing fails with `NoSuchElementError` when the parent option is `None` |
+| `focusOptionOrElse` | Focuses to the value inside an `Option`, falling back to a default. Wraps writes back into `Option.some` | Immutable | Never fails, unlike `focusOption` |
 
 #### Manually
 You can create focused Lenses by composing them manually using `map`, `mapEffect` and `unwrap`:
 ```typescript
 const ref = yield* SubscriptionRef.make<readonly User[]>([
-    { name: "Jean Dupont", age: yield* DateTime.make("03/25/1969") },
-    { name: "Juan Joya Borja", age: yield* DateTime.make("04/05/1956") },
-    { name: "Benzemonstre", age: yield* DateTime.make("06/12/2000") },
+    { name: "Jean Dupont", age: yield* Effect.fromOption(DateTime.make("03/25/1969")) },
+    { name: "Juan Joya Borja", age: yield* Effect.fromOption(DateTime.make("04/05/1956")) },
+    { name: "Benzemonstre", age: yield* Effect.fromOption(DateTime.make("06/12/2000")) },
 ])
 
-//                  \/ Lens<User, NoSuchElementException, NoSuchElementException, never, never>
+//                  \/ Lens<User, NoSuchElementError, NoSuchElementError, never, never>
 const benzemonstreLens = ref.pipe(
     Lens.fromSubscriptionRef,
 
     // Manually focus
     Lens.mapEffect(
         // Getter:
-        Array.get(2),
+        a => Effect.fromOption(Array.get(a, 2)),
         // Setter:
-        (a, b) => Array.replaceOption(a, 2, b),
+        (a, b) => Effect.fromOption(Array.replace(a, 2, b)),
     //   ^ The current Lens value (readonly User[])
     //      ^ The new focused value to push (User)
     ),
 )
-// Both Array.get and Array.replaceOption return an Option
-// When evaluated by the lens, Option<A> becomes Effect<A, NoSuchElementException>
+// Both Array.get and Array.replace return an Option, which Effect.fromOption
+// converts into Effect<A, NoSuchElementError>
 // As you can see, this is automatically tracked by the Lens type
 ```
 
@@ -250,20 +257,50 @@ const nameLens = lens.pipe(
 ```
 
 
-### Subscribable
+### Connecting streams, views, and lenses
 
-Effect's `Subscribable` is a read-only, reactive view of a value: it lets you read the current value and observe subsequent changes. Every `Lens` implements both `Subscribable` and `Readable`, which you can use as constraints to allow some parts of your app to only read and subscribe to the Lenses you provide them:
+Use `Lens.toSink` to consume a stream by setting a Lens to every emitted value:
+```typescript
+yield* Stream.make(1, 2, 3).pipe(
+    Stream.run(Lens.toSink(lens)),
+)
+```
+
+Use `Lens.run` or `View.run` to send changes through a Sink. For long-lived sources, run the connection in a scope:
+```typescript
+yield* Effect.forkScoped(
+    sourceLens.pipe(
+        Lens.run(Lens.toSink(targetLens)),
+    ),
+)
+```
+
+Effect's existing stream runners can connect a View to other targets such as a `PubSub`:
+```typescript
+yield* Effect.forkScoped(
+    sourceView.changes.pipe(
+        Stream.runIntoPubSub(pubsub),
+    ),
+)
+```
+
+`View.run` consumes the View's `changes` stream directly and does not perform a separate `get` first. Whether the current value is emitted initially therefore follows the semantics of that View's `changes` stream.
+
+
+### View
+
+A `View` is a read-only, reactive view of a value: it lets you read the current value and observe subsequent changes. Every `Lens` is also a `View`, which you can use as a constraint to allow some parts of your app to only read and subscribe to the Lenses you provide them. It replaces Effect v3's `Subscribable` module:
 ```typescript
 const ref = yield* SubscriptionRef.make<{
     readonly users: readonly User[]
 }>({ users: [] })
 
-const logUserCount = (users: Subscribable.Subscribable<readonly User[]>) =>
+const logUserCount = (users: View.View<readonly User[]>) =>
     Effect.gen(function*() {
-        const userCount = Subscribable.focusArrayLength(users)
-        yield* Console.log(`There are ${yield* userCount.get} users`)
+        const userCount = View.focusArrayLength(users)
+        yield* Console.log(`There are ${yield* View.get(userCount)} users`)
         yield* Stream.runForEach(
-            userCount.changes,
+            View.changes(userCount),
             count => Console.log(`There are now ${count} users`),
         )
     })
@@ -275,23 +312,26 @@ const usersLens = ref.pipe(
 yield* Effect.forkScoped(logUserCount(usersLens))
 ```
 
+Use `Lens.asView` when you want to make that read-only boundary explicit.
+
 #### Focusing
-Subscribables can be focused in the same way as Lenses. This library re-exports Effect's `Subscribable` module and adds value and error transforms, plus recovery (`catchAll`, `catchAllCause`, `orElse`, `orElseSucceed`, and `retry`):
+Views can be focused in the same way as Lenses. The `View` module also provides value and error transforms, plus recovery (`catch`, `catchCause`, `orElse`, `orElseSucceed`, and `retry`):
 ```typescript
-import { Subscribable } from "effect-lens"
+import { View } from "effect-lens"
 
-declare const sub: Subscribable.Subscribable<readonly { name: string }[], never, never>
+declare const view: View.View<readonly { name: string }[], never, never>
 
-//         \/ Subscribable.Subscribable<string, NoSuchElementException, never>
-const nameSub = sub.pipe(
-    Subscribable.focusArrayAt(1),
-    Subscribable.focusObjectOn("name"),
+//         \/ View.View<string, NoSuchElementError, never>
+const nameView = view.pipe(
+    View.focusArrayAt(1),
+    View.focusObjectOn("name"),
 )
 ```
 
 Currently available:
 | Name | Description |
 | - | - |
+| `filter` | Narrows the focus to values matching a predicate or refinement. Fails with `NoSuchElementError` when the value does not match |
 | `focusObjectOn` | Focuses to the field of an object |
 | `focusArrayAt` | Focuses to an indexed entry of an array |
 | `focusArrayLength` | Focuses to the length of an array |
@@ -299,11 +339,7 @@ Currently available:
 | `focusChunkAt` | Focuses to an indexed entry of a `Chunk` |
 | `focusChunkSize` | Focuses to the size of a `Chunk` |
 | `focusIterableSize` | Focuses to the size of an iterable |
-
-
-## Todo
-
-This library is already ready to use! However, there is always more to do...
-- Provide an API reference
-- Add new adapters for various data source types
-- Add new focus transforms
+| `focusRecordAt` | Focuses to the value at a key of a `Record`. Fails with `NoSuchElementError` when the key is not present |
+| `focusHashMapAt` | Focuses to the value at a key of a `HashMap`. Fails with `NoSuchElementError` when the key is not present |
+| `focusOption` | Focuses to the value inside an `Option`. Fails with `NoSuchElementError` when the option is `None` |
+| `focusOptionOrElse` | Focuses to the value inside an `Option`, falling back to a default. Never fails, unlike `focusOption` |
