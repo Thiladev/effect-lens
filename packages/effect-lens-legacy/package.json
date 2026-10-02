@@ -1,7 +1,7 @@
 {
   "name": "effect-lens-legacy",
   "description": "An effectful Lens type to easily manage nested state",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "type": "module",
   "files": [
     "./README.md",
